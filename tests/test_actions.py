@@ -3,6 +3,8 @@
 import json
 
 import pytest
+from photoframe.imaging import MAX_RENDER_EDGE
+from photoframe.library import photo_id_of
 
 
 @pytest.fixture
@@ -18,8 +20,8 @@ def config_of(app):
 def rules_of(app, kind):
     """The blacklist/favourite rules as the database holds them."""
     import store
-    with app._db_lock:
-        return store.rules(app._db, kind)
+    with app.db.lock:
+        return store.rules(app.db.borrow(), kind)
 
 
 def post(client, path, **body):
@@ -32,15 +34,15 @@ def seed_photos(app, ratios):
     The test library is built on disk, but nothing walks it into the database — that is
     scan.py's job and it lives outside this project.
     """
-    with app._db_lock:
+    with app.db.lock:
         for rel, ratio in ratios.items():
-            app._db.execute(
+            app.db.borrow().execute(
                 "INSERT OR REPLACE INTO photo (rel, ratio) VALUES (?, ?)", (rel, ratio))
-        app._db.commit()
+        app.db.borrow().commit()
 
 
 def test_hiding_a_photo_writes_it_and_drops_it_from_the_library(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     body = post(client, "/api/blacklist", id=pid, scope="photo").get_json()
 
     assert body["entry"] == "Trip/Day1/beach.avif"
@@ -50,16 +52,16 @@ def test_hiding_a_photo_writes_it_and_drops_it_from_the_library(client, app):
 
 
 def test_hiding_a_folder_takes_everything_under_it(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     body = post(client, "/api/blacklist", id=pid, scope="folder", folder="Trip/Day1").get_json()
 
     assert body["entry"] == "Trip/Day1"
-    assert set(body["removed"]) == {pid, app.photo_id_of("Trip/Day1/tower.avif")}
+    assert set(body["removed"]) == {pid, photo_id_of("Trip/Day1/tower.avif")}
     assert rules_of(app, "blacklist_folder") == ["Trip/Day1"]
 
 
 def test_a_folder_that_does_not_contain_the_photo_is_refused(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     for folder in ["Screenshots", "", "../..", "/etc"]:
         response = post(client, "/api/blacklist", id=pid, scope="folder", folder=folder)
         assert response.status_code == 400, folder
@@ -67,7 +69,7 @@ def test_a_folder_that_does_not_contain_the_photo_is_refused(client, app):
 
 
 def test_an_unknown_scope_is_refused(client, app):
-    pid = app.photo_id_of("wide.avif")
+    pid = photo_id_of("wide.avif")
     assert post(client, "/api/blacklist", id=pid, scope="everything").status_code == 400
 
 
@@ -76,18 +78,18 @@ def test_an_unknown_photo_is_a_404(client):
 
 
 def test_undo_restores_the_photo_and_leaves_no_entry_behind(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     post(client, "/api/blacklist", id=pid, scope="photo")
 
     body = post(client, "/api/blacklist/undo", entry="Trip/Day1/beach.avif", scope="photo").get_json()
     assert body["id"] == pid
     assert rules_of(app, "blacklist_file") == []
     assert client.get(f"/img/{pid}").status_code == 200
-    assert app._ratio[pid] == pytest.approx(1.78, abs=0.01)  # re-probed, not left blank
+    assert app.library.ratio_of(pid) == pytest.approx(1.78, abs=0.01)  # re-probed, not left blank
 
 
 def test_undo_of_a_folder_rebuilds_the_index(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     post(client, "/api/blacklist", id=pid, scope="folder", folder="Trip/Day1")
     post(client, "/api/blacklist/undo", entry="Trip/Day1", scope="folder")
 
@@ -96,7 +98,7 @@ def test_undo_of_a_folder_rebuilds_the_index(client, app):
 
 
 def test_favouriting_by_name_and_removing_it_again(client, app):
-    pid = app.photo_id_of("wide.avif")
+    pid = photo_id_of("wide.avif")
 
     assert post(client, "/api/favorite", id=pid, favorite=True).get_json()["coveredBy"] == "name"
     assert rules_of(app, "favorite") == ["wide.avif"]
@@ -109,32 +111,32 @@ def test_favouriting_by_name_and_removing_it_again(client, app):
 def test_unfavouriting_a_photo_a_tag_covers_records_an_exception(make_app):
     app = make_app({"favorites": ["tag:album_japan"]})
     client = app.app.test_client()
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("album_japan",)
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("album_japan",))
 
     body = post(client, "/api/favorite", id=pid, favorite=False).get_json()
     assert body["coveredBy"] == "rule"
     assert rules_of(app, "unfavorite") == ["Trip/Day1/tower.avif"]
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is False
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is False
 
 
 def test_favouriting_it_again_drops_the_exception_rather_than_adding_a_duplicate(make_app):
     app = make_app({"favorites": ["tag:album_japan"], "unfavorites": ["Trip/Day1/tower.avif"]})
     client = app.app.test_client()
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("album_japan",)
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("album_japan",))
 
     post(client, "/api/favorite", id=pid, favorite=True)
     assert rules_of(app, "unfavorite") == []
     assert rules_of(app, "favorite") == ["tag:album_japan"]  # the rule alone still covers it
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is True
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is True
 
 
 def test_favouriting_never_rewrites_config_json(client, app):
     """Settings and rules are separate now: config.json is only ever read by the frame,
     so a hand-edited setting cannot be lost to a tap on the device."""
     before = app.config_file.read_bytes()
-    post(client, "/api/favorite", id=app.photo_id_of("wide.avif"), favorite=True)
+    post(client, "/api/favorite", id=photo_id_of("wide.avif"), favorite=True)
     assert app.config_file.read_bytes() == before
     assert rules_of(app, "favorite") == ["wide.avif"]
 
@@ -144,17 +146,17 @@ def test_rendering_returns_exactly_the_requested_size_as_jpeg(client, app):
 
     from PIL import Image
 
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     response = client.get(f"/img/{pid}?w=320&h=200")
     assert response.mimetype == "image/jpeg"
     assert Image.open(BytesIO(response.data)).size == (320, 200)
 
 
 def test_rendering_never_touches_the_original(client, app):
-    original = app.PHOTO_DIR / "Trip/Day1/beach.avif"
+    original = app.settings.photo_dir / "Trip/Day1/beach.avif"
     before = original.stat().st_mtime_ns, original.read_bytes()
 
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     client.get(f"/img/{pid}?w=320&h=200")
     client.get(f"/img/{pid}")
 
@@ -162,9 +164,9 @@ def test_rendering_never_touches_the_original(client, app):
 
 
 def test_without_a_size_the_original_is_served_byte_for_byte(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     response = client.get(f"/img/{pid}")
-    assert response.data == (app.PHOTO_DIR / "Trip/Day1/beach.avif").read_bytes()
+    assert response.data == (app.settings.photo_dir / "Trip/Day1/beach.avif").read_bytes()
 
 
 def test_an_absurd_size_is_clamped_rather_than_allocated(client, app):
@@ -172,9 +174,9 @@ def test_an_absurd_size_is_clamped_rather_than_allocated(client, app):
 
     from PIL import Image
 
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     response = client.get(f"/img/{pid}?w=99999&h=10")
-    assert Image.open(BytesIO(response.data)).size == (app.MAX_RENDER_EDGE, 64)
+    assert Image.open(BytesIO(response.data)).size == (MAX_RENDER_EDGE, 64)
 
 
 def test_a_token_protected_frame_refuses_anonymous_requests(make_app):
@@ -196,7 +198,7 @@ def test_hiding_invalidates_passes_a_client_is_still_paging_through(client, app)
     first = client.get("/api/playlist?limit=1").get_json()
     token, total = first["token"], first["total"]
 
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     hidden = set(
         client.post("/api/blacklist", json={"id": pid, "scope": "folder", "folder": "Trip/Day1"})
         .get_json()["removed"]
@@ -207,12 +209,12 @@ def test_hiding_invalidates_passes_a_client_is_still_paging_through(client, app)
 
 
 def test_photo_info_carries_the_path_as_it_exists_on_this_machine(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     body = client.get(f"/api/photo/{pid}").get_json()
 
     assert body["folder"] == "Trip/Day1"
     assert body["file"] == "beach.avif"
-    assert body["fullPath"] == str(app.PHOTO_DIR / "Trip" / "Day1" / "beach.avif")
+    assert body["fullPath"] == str(app.settings.photo_dir / "Trip" / "Day1" / "beach.avif")
 
 
 def test_a_broken_avifdec_falls_back_to_pillow_rather_than_failing(make_app):
@@ -222,15 +224,15 @@ def test_a_broken_avifdec_falls_back_to_pillow_rather_than_failing(make_app):
 
     from PIL import Image
 
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     response = client.get(f"/img/{pid}?w=320&h=200")
     assert response.status_code == 200
     assert Image.open(BytesIO(response.data)).size == (320, 200)
-    assert app._render_times["pillow"]  # recorded as a Pillow render, not an avifdec one
+    assert app.renderer.stats()["pillow"]["renders"]  # recorded as a Pillow render, not an avifdec one
 
 
 def test_render_stats_reports_each_decoder(client, app):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     client.get(f"/img/{pid}?w=320&h=200")
 
     body = client.get("/api/render-stats").get_json()
@@ -247,22 +249,22 @@ def test_the_database_can_stand_in_for_a_walk(make_app):
     app = make_app()
     seed_photos(app, {"Trip/Day1/beach.avif": 1.5, "Trip/Day2/pano.avif": 2.0})
 
-    assert app.index_from_db() == len(app._index)
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
-    assert pid in app._index
-    assert app._ratio[pid] == 1.5          # taken from the database, not probed
-    assert app._probe_done.is_set()        # and nothing is left to read off the disk
+    assert app.library.load() == len(app.library)
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    assert pid in dict(app.library.items())
+    assert app.library.ratio_of(pid) == 1.5          # taken from the database, not probed
+    assert app.library.probe_done.is_set()        # and nothing is left to read off the disk
 
 
 def test_a_photo_deleted_from_disk_is_dropped_when_it_is_next_wanted(app):
     """The failsafe for starting from the database without a walk: notice on use, forget,
     and move on rather than showing an error."""
     client = app.app.test_client()
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
-    (app.PHOTO_DIR / "Trip/Day1/beach.avif").unlink()
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    (app.settings.photo_dir / "Trip/Day1/beach.avif").unlink()
 
     assert client.get(f"/img/{pid}").status_code == 404
-    assert pid not in app._index          # forgotten, not merely refused
+    assert pid not in dict(app.library.items())          # forgotten, not merely refused
 
 
 def test_the_blacklist_still_applies_when_starting_from_the_database(make_app):
@@ -272,9 +274,9 @@ def test_the_blacklist_still_applies_when_starting_from_the_database(make_app):
     app = make_app({"blacklist": {"folders": ["Trip/Day1"], "files": []}})
     seed_photos(app, {"Trip/Day1/beach.avif": 1.5, "Trip/Day2/pano.avif": 2.0})
 
-    app.index_from_db()
-    assert app.photo_id_of("Trip/Day1/beach.avif") not in app._index
-    assert app.photo_id_of("Trip/Day2/pano.avif") in app._index
+    app.library.load()
+    assert photo_id_of("Trip/Day1/beach.avif") not in dict(app.library.items())
+    assert photo_id_of("Trip/Day2/pano.avif") in dict(app.library.items())
 
 
 def test_api_config_reports_the_rules_the_frame_is_enforcing(client, app):
@@ -292,7 +294,7 @@ def test_api_config_reports_the_rules_the_frame_is_enforcing(client, app):
 
 
 def test_the_favourite_count_follows_the_database(client, app):
-    pid = app.photo_id_of("Trip/Day2/pano.avif")
+    pid = photo_id_of("Trip/Day2/pano.avif")
     before = len(rules_of(app, "favorite"))
     data = post(client, "/api/favorite", id=pid, favorite=True).get_json()
     assert data["count"] == before + 1 == len(rules_of(app, "favorite"))

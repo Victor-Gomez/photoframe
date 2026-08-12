@@ -1,6 +1,7 @@
 """Aspect matching, favourite weighting and the paging of a shuffled pass."""
 
 import pytest
+from photoframe.library import LANDSCAPE, PORTRAIT, orientation_from, photo_id_of
 
 
 @pytest.fixture
@@ -10,19 +11,19 @@ def client(app):
 
 
 def ids_of(app, *relatives):
-    return {app.photo_id_of(rel) for rel in relatives}
+    return {photo_id_of(rel) for rel in relatives}
 
 
 def test_orientation_is_derived_from_the_ratio(app):
-    assert app.orientation_from(1.78) == app.LANDSCAPE
-    assert app.orientation_from(1.0) == app.LANDSCAPE  # square counts as landscape
-    assert app.orientation_from(0.67) == app.PORTRAIT
+    assert orientation_from(1.78) == LANDSCAPE
+    assert orientation_from(1.0) == LANDSCAPE  # square counts as landscape
+    assert orientation_from(0.67) == PORTRAIT
 
 
 def test_ratios_come_from_the_header_not_a_decode(app):
-    assert app._ratio[app.photo_id_of("Trip/Day1/beach.avif")] == pytest.approx(1.78, abs=0.01)
-    assert app._ratio[app.photo_id_of("Trip/Day1/tower.avif")] == pytest.approx(0.67, abs=0.01)
-    assert app._ratio[app.photo_id_of("Trip/Day2/pano.avif")] == pytest.approx(3.0, abs=0.01)
+    assert app.library.ratio_of(photo_id_of("Trip/Day1/beach.avif")) == pytest.approx(1.78, abs=0.01)
+    assert app.library.ratio_of(photo_id_of("Trip/Day1/tower.avif")) == pytest.approx(0.67, abs=0.01)
+    assert app.library.ratio_of(photo_id_of("Trip/Day2/pano.avif")) == pytest.approx(3.0, abs=0.01)
 
 
 def test_a_landscape_screen_gets_every_landscape_photo(client, app):
@@ -76,7 +77,7 @@ def test_a_favourite_is_dealt_into_the_pass_favoriteweight_times(make_app):
     client = app.app.test_client()
     body = client.get("/api/playlist?ratio=1.7778&limit=0").get_json()
     counts = {pid: body["ids"].count(pid) for pid in set(body["ids"])}
-    favourite = app.photo_id_of("wide.avif")
+    favourite = photo_id_of("wide.avif")
     assert counts.pop(favourite) == 10
     assert set(counts.values()) == {1}
     assert body["favorites"] == 1
@@ -85,21 +86,18 @@ def test_a_favourite_is_dealt_into_the_pass_favoriteweight_times(make_app):
 def test_weighting_can_be_switched_off(make_app):
     app = make_app({"favorites": ["wide.avif"], "favoriteWeight": 1})
     body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=0").get_json()
-    assert body["ids"].count(app.photo_id_of("wide.avif")) == 1
+    assert body["ids"].count(photo_id_of("wide.avif")) == 1
 
 
 def test_copies_of_a_favourite_are_spread_out_rather_than_adjacent():
     import random
-    import sys
-    from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import app as module
+    from photoframe.web.playlist import weighted_shuffle
 
     random.seed(7)
     ids = [f"p{i:05d}" for i in range(2000)]
     favourites = {"p00007"}
-    pass_ = module.weighted_shuffle(list(ids), favourites, 10)
+    pass_ = weighted_shuffle(list(ids), favourites, 10)
 
     positions = [i for i, pid in enumerate(pass_) if pid == "p00007"]
     assert len(positions) == 10
@@ -133,8 +131,8 @@ def test_a_library_still_being_indexed_serves_photos_rather_than_nothing(app):
     """The aspect index is built in the background; an empty filter result during that
     window means "not ready", not "no photos". Answering with an empty list makes the
     frame announce that a full library is empty."""
-    app._ratio.clear()          # as it is for the first minute after a restart
-    app._probe_done.clear()
+    app.library._ratio.clear()          # as it is for the first minute after a restart
+    app.library.probe_done.clear()
     client = app.app.test_client()
 
     body = client.get("/api/playlist?ratio=1.7778&limit=100").get_json()

@@ -1,24 +1,26 @@
 """The blacklist / favourites matching rules, which are what the config file promises."""
 
 import pytest
+from photoframe.library import ancestors, photo_id_of
+from photoframe.rules import Matcher, normalise_entry
 
 
 def test_normalise_entry_accepts_either_slash_and_strips_decoration(app):
-    assert app.normalise_entry("  Trip\\Day1  ") == "Trip/Day1"
-    assert app.normalise_entry("./Trip/Day1/") == "Trip/Day1"
-    assert app.normalise_entry("Trip/Day1") == "Trip/Day1"
+    assert normalise_entry("  Trip\\Day1  ") == "Trip/Day1"
+    assert normalise_entry("./Trip/Day1/") == "Trip/Day1"
+    assert normalise_entry("Trip/Day1") == "Trip/Day1"
 
 
 def test_photo_id_is_stable_and_derived_from_the_relative_path(app):
-    assert app.photo_id_of("Trip/Day1/beach.avif") == app.photo_id_of("Trip/Day1/beach.avif")
-    assert app.photo_id_of("Trip/Day1/beach.avif") != app.photo_id_of("Trip/Day2/pano.avif")
+    assert photo_id_of("Trip/Day1/beach.avif") == photo_id_of("Trip/Day1/beach.avif")
+    assert photo_id_of("Trip/Day1/beach.avif") != photo_id_of("Trip/Day2/pano.avif")
 
 
 def test_ancestors_lists_every_level_outermost_first(app):
     from pathlib import PurePosixPath
 
-    assert app.ancestors(PurePosixPath("a/b/c/photo.avif")) == ["a", "a/b", "a/b/c"]
-    assert app.ancestors(PurePosixPath("photo.avif")) == []
+    assert ancestors(PurePosixPath("a/b/c/photo.avif")) == ["a", "a/b", "a/b/c"]
+    assert ancestors(PurePosixPath("photo.avif")) == []
 
 
 @pytest.mark.parametrize(
@@ -38,17 +40,17 @@ def test_ancestors_lists_every_level_outermost_first(app):
     ],
 )
 def test_matcher_rules(app, entries, path, expected):
-    assert app.Matcher(entries)(path) is expected
+    assert Matcher(entries)(path) is expected
 
 
 def test_matching_is_case_insensitive(app):
-    assert app.Matcher(["trip/day1"])("trip/day1/beach.avif") is True
-    assert app.matches("TRIP/Day1/Beach.avif", "folders") is False  # nothing configured
+    assert Matcher(["trip/day1"])("trip/day1/beach.avif") is True
+    assert app.rules.matcher("folders")("TRIP/Day1/Beach.avif".lower()) is False  # nothing configured
 
 
 def test_blacklisted_folder_hides_everything_under_it(make_app):
     app = make_app({"blacklist": {"folders": ["Trip/Day1"], "files": []}})
-    indexed = set(app._rel_lower.values())
+    indexed = set(app.library.rel_lower_map().values())
     assert "trip/day1/beach.avif" not in indexed
     assert "trip/day1/tower.avif" not in indexed
     assert "trip/day2/pano.avif" in indexed
@@ -56,60 +58,60 @@ def test_blacklisted_folder_hides_everything_under_it(make_app):
 
 def test_blacklisted_file_hides_only_that_photo(make_app):
     app = make_app({"blacklist": {"folders": [], "files": ["Trip/Day1/beach.avif"]}})
-    indexed = set(app._rel_lower.values())
+    indexed = set(app.library.rel_lower_map().values())
     assert "trip/day1/beach.avif" not in indexed
     assert "trip/day1/tower.avif" in indexed
 
 
 def test_blacklist_glob_hides_a_whole_file_type(make_app):
     app = make_app({"blacklist": {"folders": [], "files": ["*.png"]}})
-    assert not [rel for rel in app._rel_lower.values() if rel.endswith(".png")]
-    assert [rel for rel in app._rel_lower.values() if rel.endswith(".avif")]
+    assert not [rel for rel in app.library.rel_lower_map().values() if rel.endswith(".png")]
+    assert [rel for rel in app.library.rel_lower_map().values() if rel.endswith(".avif")]
 
 
 def test_favorite_by_name_and_by_folder(make_app):
     app = make_app({"favorites": ["Trip/Day1/beach.avif", "Trip/Day2"]})
-    assert app.is_favorite("Trip/Day1/beach.avif") is True
-    assert app.is_favorite("Trip/Day2/pano.avif") is True  # covered by the folder
-    assert app.is_favorite("Trip/Day1/tower.avif") is False
+    assert app.rules.is_favorite("Trip/Day1/beach.avif") is True
+    assert app.rules.is_favorite("Trip/Day2/pano.avif") is True  # covered by the folder
+    assert app.rules.is_favorite("Trip/Day1/tower.avif") is False
 
 
 def test_favorite_by_tag(make_app):
     app = make_app({"favorites": ["tag:album_japan"]})
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("album_japan",)
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is True
-    assert app.is_favorite("Trip/Day1/beach.avif") is False
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("album_japan",))
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is True
+    assert app.rules.is_favorite("Trip/Day1/beach.avif") is False
 
 
 def test_favorite_by_tag_glob(make_app):
     app = make_app({"favorites": ["tag:album_*"]})
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("album_japan",)
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is True
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("album_japan",))
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is True
 
 
 def test_unfavorites_override_a_tag(make_app):
     app = make_app(
         {"favorites": ["tag:album_japan"], "unfavorites": ["Trip/Day1/tower.avif"]}
     )
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("album_japan",)
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is False
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("album_japan",))
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is False
 
 
 def test_unfavorites_override_a_folder(make_app):
     app = make_app({"favorites": ["Trip"], "unfavorites": ["Trip/Day2/pano.avif"]})
-    assert app.is_favorite("Trip/Day1/beach.avif") is True
-    assert app.is_favorite("Trip/Day2/pano.avif") is False
+    assert app.rules.is_favorite("Trip/Day1/beach.avif") is True
+    assert app.rules.is_favorite("Trip/Day2/pano.avif") is False
 
 
 def test_unfavorite_tag_excludes_a_favorited_folder(make_app):
     app = make_app({"favorites": ["Trip"], "unfavorites": ["tag:blurry"]})
-    pid = app.photo_id_of("Trip/Day1/tower.avif")
-    app._tags[pid] = ("blurry",)
-    assert app.is_favorite("Trip/Day1/tower.avif", pid) is False
-    assert app.is_favorite("Trip/Day1/beach.avif") is True
+    pid = photo_id_of("Trip/Day1/tower.avif")
+    app.library.set_tags(pid, ("blurry",))
+    assert app.rules.is_favorite("Trip/Day1/tower.avif", pid) is False
+    assert app.rules.is_favorite("Trip/Day1/beach.avif") is True
 
 
 def test_a_malformed_config_falls_back_to_defaults_without_rewriting_it(
@@ -127,7 +129,7 @@ def test_a_malformed_config_falls_back_to_defaults_without_rewriting_it(
     sys.modules.pop("app", None)
     app = importlib.import_module("app")
 
-    assert app.PHOTO_DIR == library.resolve()
+    assert app.settings.photo_dir == library.resolve()
     assert broken.read_text(encoding="utf-8") == "{ not json"  # never clobbered
 
 
@@ -148,5 +150,5 @@ def test_a_config_with_a_byte_order_mark_still_parses(tmp_path, library, monkeyp
 
     # Checked against a setting rather than a rule: the lists live in photos.db now, so a
     # favourites entry in config.json is ignored by design and would prove nothing here.
-    assert app._config["slideSeconds"] == 42
-    assert app.SLIDE_SECONDS == 42
+    assert app.settings.values["slideSeconds"] == 42
+    assert app.settings.slide_seconds == 42

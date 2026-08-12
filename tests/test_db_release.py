@@ -5,6 +5,7 @@ start it again, which costs a restart and a reindex; releasing and resuming does
 job while the frame keeps showing photos.
 """
 import pytest
+from photoframe.library import photo_id_of
 
 
 @pytest.fixture
@@ -19,15 +20,15 @@ def test_release_closes_the_file_and_resume_takes_it_back(app, client):
     released = client.post("/api/db/release").get_json()
     assert released["open"] is False
     assert released["alreadyReleased"] is False
-    assert app._db is None
+    assert app.db.borrow() is None
 
-    before = dict(app._index)
+    before = dict(app.library.items())
     resumed = client.post("/api/db/resume").get_json()
     assert resumed["open"] is True
-    assert app._db is not None
+    assert app.db.borrow() is not None
     # This fixture's database carries rules but no photo rows, so the reindex finds
     # nothing — and must therefore leave the live index alone rather than emptying it.
-    assert app._index == before
+    assert dict(app.library.items()) == before
 
 
 def test_releasing_twice_is_harmless(client):
@@ -40,7 +41,7 @@ def test_releasing_twice_is_harmless(client):
 
 def test_photos_keep_being_served_while_released(app, client):
     """The whole point: the frame does not stop for maintenance."""
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     client.post("/api/db/release")
     try:
         assert client.get("/api/playlist?ratio=1.7778").get_json()["ids"]
@@ -56,23 +57,23 @@ def test_the_blacklist_still_applies_while_released(app, client):
     load_rules() used to rebuild the lists as empty when there was no database, which
     would have put every blacklisted photo back on screen.
     """
-    victim = app.photo_id_of("Trip/Day1/tower.avif")
+    victim = photo_id_of("Trip/Day1/tower.avif")
     client.post("/api/blacklist", json={"id": victim, "scope": "photo"})
-    hidden = app.matcher("files")
+    hidden = app.rules.matcher("files")
 
     client.post("/api/db/release")
     try:
-        app.load_rules()                      # what a rescan would trigger
-        assert app.matcher("files").exact == hidden.exact
-        assert app.blacklisted_file("trip/day1/tower.avif")
+        app.rules.reload()                      # what a rescan would trigger
+        assert app.rules.matcher("files").exact == hidden.exact
+        assert app.rules.blacklisted_file("trip/day1/tower.avif")
     finally:
         client.post("/api/db/resume")
-    assert app.blacklisted_file("trip/day1/tower.avif")
+    assert app.rules.blacklisted_file("trip/day1/tower.avif")
 
 
 def test_writes_fail_loudly_rather_than_silently(app, client):
     """Answering 200 to a favourite that was never recorded is the worst outcome."""
-    pid = app.photo_id_of("Trip/Day2/pano.avif")
+    pid = photo_id_of("Trip/Day2/pano.avif")
     client.post("/api/db/release")
     try:
         for path, body in (
@@ -88,7 +89,7 @@ def test_writes_fail_loudly_rather_than_silently(app, client):
 
 
 def test_the_info_panel_degrades_instead_of_failing(app, client):
-    pid = app.photo_id_of("Trip/Day1/beach.avif")
+    pid = photo_id_of("Trip/Day1/beach.avif")
     client.post("/api/db/release")
     try:
         info = client.get(f"/api/info/{pid}").get_json()
@@ -102,10 +103,10 @@ def test_resume_picks_up_rules_written_while_it_was_away(app, client):
     """The reason the endpoint exists: another tool rewrote the file underneath."""
     import store
     client.post("/api/db/release")
-    conn = store.open_db(app.DB_FILE)          # only possible because the file is free
+    conn = store.open_db(app.settings.db_file)          # only possible because the file is free
     store.add_rule(conn, "favorite", "Trip/Day2/pano.avif")
     conn.commit()
     conn.close()
 
     client.post("/api/db/resume")
-    assert app.is_favorite("Trip/Day2/pano.avif")
+    assert app.rules.is_favorite("Trip/Day2/pano.avif")

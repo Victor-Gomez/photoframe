@@ -13,10 +13,23 @@ on the fly and keeps nothing on disk.
 
 | file | what it is |
 | --- | --- |
-| `app.py` | the frame: serves the slideshow and the API the device talks to |
+| `app.py` | the entry point. Reads the environment, builds the pieces below, serves |
+| `photoframe/settings.py` | config.json, with every scalar overridable by environment variable |
+| `photoframe/database.py` | the connection to `photos.db`, and lending the file out to a tool |
+| `photoframe/rules.py` | the blacklist and the favourites, and the matching they drive |
+| `photoframe/library.py` | which photos exist, their shape, their tags, and the shuffled passes |
+| `photoframe/imaging.py` | reading headers, rendering to screen size, the in-memory cache |
+| `photoframe/frame.py` | wires the above together — the only module that knows the whole graph |
+| `photoframe/web/` | the HTTP surface, one blueprint per group of endpoints |
 | `web/` | the page — `frame.html`, `frame.css`, `frame.js`, re-read from disk on every request |
 | `config.json` | settings only — ports, timings, paths |
 | `tests/` | the suite. `python -m pytest` |
+
+Each piece is handed the collaborators it needs and owns its own state, so the dependencies
+run one way: `Database <- Rules <- Library`, with `Renderer` over `RenderCache` beside them.
+The one place that would otherwise be a cycle is reopening the database, which has to
+rebuild the rules and the index above it — `Database` calls back instead of importing them,
+and `frame.py` registers the callbacks.
 
 Everything about the *library* lives in the library's own metadata folder and is not part
 of this repository: `store.py` (schema and migrations), `scan.py` (EXIF/XMP), `faces.py`,
@@ -35,7 +48,7 @@ pip install -r requirements.txt
 python app.py                 # the frame, http://<host>:8080
 ```
 
-`app.py` needs only Flask, Pillow and waitress. The library tools — `scan.py`, `faces.py`,
+The frame needs only Flask, Pillow and waitress. The library tools — `scan.py`, `faces.py`,
 `faces_ui.py`, `geocode.py` — live in the library's metadata folder with their own
 requirements, and are run from there.
 
@@ -216,6 +229,7 @@ The frame runs on a Windows box as a scheduled task at `C:\Projects\photoframe`.
 
 ```bash
 scp app.py server@frame-host:C:/Projects/photoframe/
+scp -r photoframe server@frame-host:C:/Projects/photoframe/
 scp web/* server@frame-host:C:/Projects/photoframe/web/
 ```
 

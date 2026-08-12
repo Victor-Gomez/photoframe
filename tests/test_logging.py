@@ -53,8 +53,11 @@ def test_off_writes_no_file_at_all(tmp_path, library, monkeypatch):
     app.app.logger.error("avifdec failed on beach.avif")
     assert not log_file.exists()
     # Without this the record would fall through to stderr, which under pythonw.exe is
-    # None — and writing to it raises rather than merely being lost.
-    assert app.app.logger.propagate is False
+    # None — and writing to it raises rather than merely being lost. Asserted on the
+    # package logger: every module logs through a child of it, and that is where the chain
+    # is cut.
+    import logging
+    assert logging.getLogger("photoframe").propagate is False
 
 
 def test_info_can_be_turned_back_on_for_diagnosing(tmp_path, library, monkeypatch):

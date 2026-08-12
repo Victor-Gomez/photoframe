@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+from photoframe.library import photo_id_of
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # store.py lives with the library now, not with the frame; app.py finds it the same way.
@@ -88,7 +89,7 @@ def make_app(tmp_path, library, monkeypatch):
 
         sys.modules.pop("app", None)
         app = importlib.import_module("app")
-        app.probe_all()  # synchronously, so ratios and tags are ready to assert on
+        app.library.probe_all()  # synchronously, so ratios and tags are ready to assert on
         app.config_file = config_file
         return app
 
@@ -101,4 +102,4 @@ def app(make_app):
 
 
 def photo_id(app, relative):
-    return app.photo_id_of(relative)
+    return photo_id_of(relative)

@@ -8,6 +8,7 @@ import ctypes
 import sys
 
 import pytest
+from photoframe.priority import background_io, set_background_mode
 
 
 windows_only = pytest.mark.skipif(
@@ -25,7 +26,7 @@ def test_background_mode_actually_takes_effect(app):
     handle = kernel32.GetCurrentThread()
 
     normal = kernel32.GetThreadPriority(handle)
-    with app.background_io():
+    with background_io():
         lowered = kernel32.GetThreadPriority(handle)
     restored = kernel32.GetThreadPriority(handle)
 
@@ -35,19 +36,19 @@ def test_background_mode_actually_takes_effect(app):
 
 def test_background_io_restores_on_failure(app):
     with pytest.raises(ValueError):
-        with app.background_io():
+        with background_io():
             raise ValueError("boom")
     # Reaching here means the context manager neither swallowed the error nor wedged.
 
 
 def test_background_io_is_a_no_op_elsewhere(app, monkeypatch):
     monkeypatch.setattr(app.sys, "platform", "linux")
-    assert app._set_background_mode(True) is False
-    with app.background_io():
+    assert set_background_mode(True) is False
+    with background_io():
         pass
 
 
 def test_scan_still_indexes_under_background_io(app):
     """The throttle wraps the walk; it must not change what the walk finds."""
-    assert app.scan() == len(app._index)
-    assert app._index
+    assert app.library.scan() == len(app.library)
+    assert len(app.library)
