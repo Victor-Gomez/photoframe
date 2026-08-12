@@ -1,0 +1,11 @@
+{
+  "name": "photoframe-web",
+  "private": true,
+  "description": "Tests for web/frame.js. The Python suite never loads it, and every slideshow bug so far has lived there.",
+  "scripts": {
+    "test": "node --test tests/frontend/*.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

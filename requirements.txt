@@ -1,0 +1,3 @@
+Flask>=3.0
+Pillow>=11.3  # reads image headers (size + EXIF orientation); 11.3 parses AVIF natively
+waitress>=3.0

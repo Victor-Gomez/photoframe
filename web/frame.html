@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Marco de fotos</title>
+  <!-- Inline so it costs no request and cannot 404: browsers ask for /favicon.ico on every
+       page otherwise, and this app serves photos, not icons. Lucide's "image" glyph. -->
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%23111'/><g fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='5.5' width='14' height='13' rx='2'/><circle cx='9.5' cy='10' r='1.4'/><path d='M19 15.5l-3.6-3.4a1.8 1.8 0 0 0-2.5 0L6 18.5'/></g></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='frame.css') }}?v={{ assets.css }}">
+</head>
+
+<body>
+  <!-- Lucide icons (lucide.dev, ISC), inlined as a sprite: the frame runs on a LAN and
+       must not depend on reaching a CDN to draw its own labels. Referenced with <use>. -->
+  <svg id="icon-sprite" aria-hidden="true">
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+      <path d="M8 2v3" />
+      <path d="M16 2v3" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M8 13h.01" />
+      <path d="M12 13h.01" />
+      <path d="M16 13h.01" />
+      <path d="M8 17h.01" />
+      <path d="M12 17h.01" />
+      <path d="M16 17h.01" />
+    </symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24">
+      <path
+        d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" />
+      <path d="m14.5 12.5 2-2" />
+      <path d="m11.5 9.5 2-2" />
+      <path d="m8.5 6.5 2-2" />
+      <path d="m17.5 15.5 2-2" />
+    </symbol>
+    <symbol id="i-weight" viewBox="0 0 24 24">
+      <circle cx="12" cy="5" r="3" />
+      <path
+        d="M6.5 8a2 2 0 0 0-1.905 1.46L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.925-2.54L19.4 9.5A2 2 0 0 0 17.48 8Z" />
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24">
+      <path
+        d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" />
+      <circle cx="12" cy="13" r="3" />
+    </symbol>
+    <symbol id="i-aperture" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+      <path d="m14.31 8 5.74 9.94" />
+      <path d="M9.69 8h11.48" />
+      <path d="m7.38 12 5.74-9.94" />
+      <path d="M9.69 16 3.95 6.06" />
+      <path d="M14.31 16H2.83" />
+      <path d="m16.62 12-5.74 9.94" />
+    </symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24">
+      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="10" r="3" />
+    </symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24">
+      <path
+        d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+    </symbol>
+    <symbol id="i-focal" viewBox="0 0 24 24">
+      <path d="m18 8 4 4-4 4" />
+      <path d="M2 12h20" />
+      <path d="m6 8-4 4 4 4" />
+    </symbol>
+    <symbol id="i-user" viewBox="0 0 24 24">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24">
+      <path
+        d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+      <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+    </symbol>
+    <symbol id="i-lens" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="1" />
+    </symbol>
+    <symbol id="i-contrast" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 18a6 6 0 0 0 0-12v12z" />
+    </symbol>
+    <symbol id="i-altitude" viewBox="0 0 24 24">
+      <path d="m8 3 4 8 5-5 5 15H2L8 3z" />
+    </symbol>
+  </svg>
+
+  <div class="layer"><img alt=""></div>
+  <div class="layer"><img alt=""></div>
+  <div id="hud"><span id="path"></span><span id="clock"></span></div>
+  <div id="status">
+    <div class="loader">
+      <div class="box1"></div>
+      <div class="box2"></div>
+      <div class="box3"></div>
+    </div>
+    <span id="status-text"></span>
+  </div>
+
+  <div id="controls">
+    <button id="fullscreen" title="Pantalla completa" aria-label="Alternar pantalla completa">
+      <svg id="fs-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+      </svg>
+      <svg id="fs-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true" hidden>
+        <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+        <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+        <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+        <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+      </svg>
+    </button>
+    <button id="heart" title="Favorita" aria-label="Añadir a favoritas" aria-pressed="false">
+      <svg id="heart-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path
+          d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+      </svg>
+      <svg id="heart-on" class="filled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+        <path
+          d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+      </svg>
+      <!-- Swells and fades on favouriting; purely decorative. -->
+      <svg id="heart-pulse" class="filled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path
+          d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+      </svg>
+    </button>
+    <button id="more" title="Más" aria-label="Más opciones" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="12" cy="5" r="1" />
+        <circle cx="12" cy="19" r="1" />
+      </svg>
+    </button>
+  </div>
+
+  <div id="menu" hidden role="menu">
+    <div class="caption" id="menu-caption"></div>
+    <button id="hide-photo" role="menuitem">Ocultar esta foto</button>
+    <div id="hide-folders"></div>
+    <hr>
+    <button id="open-gallery" role="menuitem">Fotos cercanas</button>
+    <button id="open-info" role="menuitem">Información</button>
+    <hr>
+    <button id="menu-close" role="menuitem">Cancelar</button>
+  </div>
+
+  <!-- Revealed while a swipe is in progress, naming the action that direction will take
+       and filling in once the swipe is far enough to commit. Each pill sits on the edge
+       opposite the finger's travel: swipe left and "Next" rises on the right, swipe up
+       and "Favorite" rises from the bottom. -->
+  <div id="edges" aria-hidden="true">
+    <div class="edge up">
+      <svg id="edge-heart-on" class="filled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path
+          d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+      </svg>
+      <svg id="edge-heart-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+        <path
+          d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+      </svg>
+      <span id="edge-favorite-label">Favorita</span>
+    </div>
+    <div class="edge down">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+        <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+        <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+        <path d="m2 2 20 20" />
+      </svg>
+      <span>Ocultar</span>
+    </div>
+    <div class="edge prev">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="m15 18-6-6 6-6" />
+      </svg>
+      <span>Anterior</span>
+    </div>
+    <div class="edge next">
+      <span>Siguiente</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </div>
+  </div>
+
+  <!-- Flashed when the frame steps by hand, pointing and drifting the way it moved. -->
+  <div id="jump" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path id="jump-arrow" d="m9 18 6-6-6-6" />
+    </svg>
+  </div>
+
+  <!-- The neighbouring photos in the same folder, by filename — for spotting the rest of
+       a burst and dealing with the lot. Two-finger swipe up, or the menu. -->
+  <div id="gallery" hidden role="dialog" aria-modal="true" aria-label="Fotos cercanas">
+    <div id="gallery-bar">
+      <span id="gallery-folder"></span>
+      <button id="gallery-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
+        </svg>
+      </button>
+    </div>
+    <div id="gallery-grid"></div>
+  </div>
+
+  <!-- Cloned per tile; kept out of the script so the icons live with the other markup. -->
+  <template id="gallery-tile">
+    <figure class="tile">
+      <!-- The same loader the frame itself uses, shown only once this tile's render has
+           actually been asked for — see .tile.loading in the stylesheet. -->
+      <div class="tile-loading">
+        <div class="loader">
+          <div class="box1"></div>
+          <div class="box2"></div>
+          <div class="box3"></div>
+        </div>
+      </div>
+      <img alt="" loading="lazy" decoding="async">
+      <figcaption></figcaption>
+      <div class="tile-actions">
+        <button class="tile-fav" aria-label="Favorita" aria-pressed="false">
+          <svg class="fav-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path
+              d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+          </svg>
+          <svg class="fav-on filled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+            <path
+              d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+          </svg>
+        </button>
+        <button class="tile-hide" aria-label="Ocultar" aria-pressed="false">
+          <!-- Crossed-out eye: tapping this hides the photo. -->
+          <svg class="hide-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+            <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+            <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+            <path d="m2 2 20 20" />
+          </svg>
+          <!-- Plain eye: the photo is hidden, and tapping puts it back. -->
+          <svg class="hide-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+            <path
+              d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+      </div>
+    </figure>
+  </template>
+
+  <!-- What the camera recorded. Two-finger swipe down, or the menu. -->
+  <div id="info" hidden role="dialog" aria-modal="true" aria-label="Información de la foto">
+    <div id="info-card">
+      <div id="info-bar">
+        <span id="info-title"></span>
+        <button id="info-close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      </div>
+      <dl id="info-rows"></dl>
+    </div>
+  </div>
+
+  <!-- Cloned into the info panel when a photo carries a google_url. The mark is inlined
+       rather than linked: the frame runs on a LAN and must not depend on reaching
+       wikimedia to draw a button. Four-colour pinwheel, from the 2020 Google Photos icon. -->
+  <template id="gphotos-button">
+    <a class="gphotos" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 59 59" aria-hidden="true">
+        <path fill="#FBBC04"
+          d="M14.75 13.41c8.146 0 14.75 6.603 14.75 14.75v1.34H1.34C.6 29.5 0 28.9 0 28.16c0-8.147 6.604-14.75 14.75-14.75z" />
+        <path fill="#EA4335"
+          d="M45.59 14.75c0 8.146-6.603 14.75-14.75 14.75H29.5V1.34C29.5.6 30.1 0 30.84 0c8.147 0 14.75 6.604 14.75 14.75z" />
+        <path fill="#4285F4"
+          d="M44.25 45.59c-8.146 0-14.75-6.603-14.75-14.75V29.5h28.16c.74 0 1.34.6 1.34 1.34 0 8.147-6.604 14.75-14.75 14.75z" />
+        <path fill="#34A853"
+          d="M13.41 44.25c0-8.146 6.603-14.75 14.75-14.75h1.34v28.16c0 .74-.6 1.34-1.34 1.34-8.147 0-14.75-6.604-14.75-14.75z" />
+      </svg>
+      <span>Google Fotos</span>
+    </a>
+  </template>
+
+  <div id="toast"></div>
+
+  <script defer src="{{ url_for('static', filename='frame.js') }}?v={{ assets.js }}"></script>
+</body>
+
+</html>

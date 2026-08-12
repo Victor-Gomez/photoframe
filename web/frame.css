@@ -1,0 +1,1100 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Chrome paints a translucent blue rectangle over whatever is tapped, and it uses the
+ element's box — so a round button flashes as a square. Kill it, along with the focus
+ ring left behind after a tap; :focus-visible keeps the ring for keyboard users. */
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Control sizing. vmin already shrinks the buttons on a small screen, which is exactly
+   backwards for touch — a phone needs a bigger target, not a smaller one. Larger screens
+   take 10% over the old size, phones 56% (25% twice over — a thumb on a phone needs far more
+   than vmin gives it). "Phone" is a short edge under 600 CSS px, in either orientation. */
+/* Sized from --stable-vmin (the screen's short edge, set once in JS) rather than vmin.
+   vmin follows the *viewport*, and on Android the viewport changes whenever Chrome's
+   toolbar slides in or out -- so a tap could visibly resize every control. The device
+   does not change size, so neither should the buttons. The fallback keeps this working
+   with JS disabled, or before the script runs. */
+:root {
+  --stable-vmin: 100vmin;
+  --control-size: calc(var(--stable-vmin) * 0.0715);
+  --control-min: 38px;
+  --control-icon: calc(var(--stable-vmin) * 0.0396);
+  --control-icon-min: 21px;
+  /* The toast is sized in em from this, so everything in it scales together. */
+  --toast-font: calc(var(--stable-vmin) * 0.024);
+  --toast-font-min: 15px;
+  /* Swipe pills, sized in em from this the same way the toast is. */
+  --pill-font: calc(var(--stable-vmin) * 0.024);
+  --pill-font-min: 15px;
+  /* Always clears the control row, whatever size the buttons are on this device. */
+  --toast-bottom: calc(var(--stable-vmin) * 0.04 + var(--control-size));
+  /* A quarter of the screen: its height in landscape, its width in portrait. */
+  --chevron: 25vh;
+  /* The ambient dissolve, and the brisker one for a step asked for by hand. Still a
+     crossfade — just not one you wait through after every tap. */
+  --fade: 1.6s;
+  --fade-quick: 0.6s;
+}
+
+@media (orientation: portrait) {
+  :root {
+    --chevron: 25vw;
+  }
+}
+
+@media (max-width: 600px), (max-height: 600px) {
+  :root {
+    --control-size: calc(var(--stable-vmin) * 0.1016);
+    --control-min: 54px;
+    --control-icon: calc(var(--stable-vmin) * 0.0563);
+    --control-icon-min: 30px;
+    --toast-font: calc(var(--stable-vmin) * 0.044);
+    --toast-font-min: 17px;
+    --pill-font: calc(var(--stable-vmin) * 0.044);
+    --pill-font-min: 17px;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  /* The frame interprets every touch itself. Without this the browser also pans and
+     zooms the page, which leaves the photo sitting visibly offset — it looks as though
+     the swipe dragged the image and left it stuck there. */
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--fade) ease-in-out;
+}
+
+body.quick .layer {
+  transition-duration: var(--fade-quick);
+}
+
+/* The photo fills the screen edge to edge. The playlist only contains photos that
+ match this screen's orientation, so what `cover` crops off is a sliver at most. */
+.layer img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Never dragged, never selected, and never the target of a touch: the photo is a
+     backdrop, and only the controls above it react. */
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+#hud {
+  position: absolute;
+  /* Only the path is interactive; the clock must not swallow taps meant for the photo. */
+  pointer-events: none;
+  right: 2.5vmin;
+  bottom: 2vmin;
+  max-width: 72vw;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 1.6vmin;
+  color: #fff;
+  /* Three layers, not one. A single 12px blur is a soft glow: over a dark photo it reads
+     fine, but against a bright sky it spreads too thin to separate white text from a white
+     background. The tight 1px and 3px layers give the glyphs an edge, and the wide one
+     keeps the soft halo that stops the text looking stuck on.
+     These are also drawn through the elements' own opacity, so they have to be strong
+     here to survive #path being at 0.4. */
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.95),
+    0 1px 3px rgba(0, 0, 0, 0.9),
+    0 1px 12px rgba(0, 0, 0, 0.85);
+}
+
+#clock {
+  font: 300 4.2vmin/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Opacity dims the text-shadow along with the text, so a low value here costs contrast
+     twice over against a bright photo. */
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+#path {
+  pointer-events: auto;
+  cursor: pointer;
+  font: 300 2.1vmin/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  opacity: 0.7;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* rtl so the ellipsis lands at the *start*: a long path keeps its tail, which is the
+     telling part. The text itself must not be reordered by it, though -- "/" is a bidi
+     neutral, so in an rtl paragraph "2026-07-29/DSC02574.JPG" is displayed as
+     "DSC02574.JPG/2026-07-29". The inner span below is an explicit ltr run, which pins
+     the order while leaving the truncation alone. */
+  direction: rtl;
+  text-align: right;
+}
+
+#path>span {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+@media (hover: hover) {
+  #path:hover {
+    opacity: 1;
+  }
+}
+
+#status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3vmin;
+  font: 300 3vmin system-ui, sans-serif;
+  color: #888;
+}
+
+#status[hidden] {
+  display: none;
+}
+
+/* No text on a normal load — the loader says it. The span still carries the
+   occasional message like "reconnecting…", and takes no room when empty. */
+#status-text:empty {
+  display: none;
+}
+
+/* Loader by alexruix, from uiverse.io/alexruix/neat-tiger-82 (MIT). Three squares
+   that fold around each other; the geometry is in fixed pixels, so it is scaled as a
+   whole rather than re-expressed in vmin. The original's 1s animation-delay is
+   dropped: a loader that sits still for a second reads as a frozen page. */
+.loader {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  transform: scale(1.5);
+}
+
+.box1,
+.box2,
+.box3 {
+  border: 16px solid #f5f5f5;
+  box-sizing: border-box;
+  position: absolute;
+  display: block;
+}
+
+.box1 {
+  width: 112px;
+  height: 48px;
+  margin-top: 64px;
+  margin-left: 0px;
+  animation: abox1 2s forwards ease-in-out infinite;
+}
+
+.box2 {
+  width: 48px;
+  height: 48px;
+  margin-top: 0px;
+  margin-left: 0px;
+  animation: abox2 2s forwards ease-in-out infinite;
+}
+
+.box3 {
+  width: 48px;
+  height: 48px;
+  margin-top: 0px;
+  margin-left: 64px;
+  animation: abox3 2s forwards ease-in-out infinite;
+}
+
+@keyframes abox1 {
+  0% { width: 112px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  12.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  25% { width: 48px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  37.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  50% { width: 48px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  62.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 0px; }
+  75% { width: 48px; height: 112px; margin-top: 0px; margin-left: 0px; }
+  87.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  100% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+}
+
+@keyframes abox2 {
+  0% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  12.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  25% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  37.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  50% { width: 112px; height: 48px; margin-top: 0px; margin-left: 0px; }
+  62.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+  75% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+  87.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+  100% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+}
+
+@keyframes abox3 {
+  0% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+  12.5% { width: 48px; height: 48px; margin-top: 0px; margin-left: 64px; }
+  25% { width: 48px; height: 112px; margin-top: 0px; margin-left: 64px; }
+  37.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
+  50% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
+  62.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
+  75% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
+  87.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
+  100% { width: 112px; height: 48px; margin-top: 64px; margin-left: 0px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box1,
+  .box2,
+  .box3 {
+    animation-duration: 3s;
+  }
+}
+
+/* Controls. Quiet, but legible on any photo: a dark disc behind a white glyph works
+ over a bright sky, and the glyph's own shadow keeps it readable over a dark one. */
+#controls {
+  position: absolute;
+  left: 2vmin;
+  bottom: 2vmin;
+  display: flex;
+  gap: 1vmin;
+  /* Deliberately no opacity here: an ancestor with opacity < 1 starts a new backdrop
+     root, and the buttons' backdrop-filter would then have nothing behind it to blur.
+     The resting state is expressed in the colours instead. */
+}
+
+#controls button {
+  width: var(--control-size);
+  height: var(--control-size);
+  min-width: var(--control-min);
+  min-height: var(--control-min);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0.3vmin 1.4vmin rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: background-color 0.25s, border-color 0.25s, color 0.25s;
+}
+
+body.menu-open #controls button {
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+/* Only where there is a real pointer. A touchscreen has no hover to leave, so the browser
+   keeps the hovered look on the last thing tapped — a button that stays lit long after it
+   was pressed, as if it were still doing something. */
+@media (hover: hover) {
+  #controls:hover button {
+    background: rgba(0, 0, 0, 0.62);
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #fff;
+  }
+
+  #controls button:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+}
+
+#heart[aria-pressed="true"] {
+  color: #ff4d6a;
+}
+
+/* A heart that swells out of the button and fades, so favouriting registers even when
+   the icon it replaces looks much the same. */
+#heart {
+  position: relative;
+}
+
+#heart-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: #ff4d6a;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+#heart.pulsing #heart-pulse {
+  animation: heart-pulse 620ms cubic-bezier(0.25, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes heart-pulse {
+  0% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #heart.pulsing #heart-pulse {
+    animation-duration: 900ms;
+  }
+}
+
+/* Lucide icons (lucide.dev, ISC) are stroked outlines rather than filled shapes; the
+   one exception is the heart, which is filled to read as "already a favorite". */
+#controls svg {
+  width: var(--control-icon);
+  height: var(--control-icon);
+  min-width: var(--control-icon-min);
+  min-height: var(--control-icon-min);
+  fill: none;
+  stroke: currentColor;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.75));
+}
+
+#controls svg.filled,
+.edge svg.filled {
+  fill: currentColor;
+}
+
+/* The UA rule for [hidden] is scoped to the HTML namespace, so it does not reach an
+ <svg>. Without this the enter and exit icons stack up in the same button. */
+#controls svg[hidden] {
+  display: none;
+}
+
+#menu {
+  position: absolute;
+  left: 2vmin;
+  bottom: 10vmin;
+  min-width: 46vmin;
+  max-width: 92vw;
+  padding: 0.6vmin 0;
+  border-radius: 1.6vmin;
+  background: rgba(18, 18, 20, 0.92);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1vmin 4vmin rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 400 2.6vmin/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+#menu[hidden] {
+  display: none;
+}
+
+#menu .caption {
+  padding: 1.2vmin 2vmin 0.9vmin;
+  color: #9a9aa2;
+  font-size: 2.1vmin;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  /* keep the tail of a long path, which is the telling part */
+  text-align: left;
+}
+
+#menu button {
+  display: block;
+  width: 100%;
+  padding: 1.4vmin 2vmin;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (hover: hover) {
+  #menu button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+#menu button:disabled {
+  color: #6a6a72;
+  cursor: default;
+}
+
+#menu hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 0.5vmin 0;
+}
+
+/* Swipe affordances. Each pill sits just off its edge and slides in as the finger
+   moves that way, filling with the action's colour once the swipe is far enough to
+   commit — so a half-hearted drag visibly does nothing. */
+#edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.edge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.7em 1.1em;
+  border-radius: 0.85em;
+  background: rgba(18, 18, 20, 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 500;
+  line-height: 1;
+  font-size: max(var(--pill-font), var(--pill-font-min));
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s linear, background-color 0.15s ease, transform 0.12s ease;
+}
+
+.edge svg[hidden] { display: none; }
+
+.edge svg {
+  width: 1.4em;
+  height: 1.4em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+}
+
+.edge.up { bottom: 3vmin; left: 50%; transform: translate(-50%, 140%); }
+.edge.down { top: 3vmin; left: 50%; transform: translate(-50%, -140%); }
+.edge.prev { left: 3vmin; top: 50%; transform: translate(-140%, -50%); }
+.edge.next { right: 3vmin; top: 50%; transform: translate(140%, -50%); }
+
+.edge.up.showing { transform: translate(-50%, 0); }
+.edge.down.showing { transform: translate(-50%, 0); }
+.edge.prev.showing { transform: translate(0, -50%); }
+.edge.next.showing { transform: translate(0, -50%); }
+
+/* Past the threshold: this is what will happen when the finger lifts. */
+.edge.armed.up { background: #ff4d6a; }
+/* Removing something is not a celebration, and hiding is not deleting — both stay grey
+   rather than shouting in red. */
+.edge.armed.up.removing { background: rgba(96, 96, 104, 0.95); }
+.edge.armed.down { background: rgba(96, 96, 104, 0.95); }
+.edge.armed.prev,
+.edge.armed.next { background: rgba(255, 255, 255, 0.92); color: #111; }
+
+.edge.armed.up.showing { transform: translate(-50%, 0) scale(1.06); }
+.edge.armed.down.showing { transform: translate(-50%, 0) scale(1.06); }
+.edge.armed.prev.showing { transform: translate(0, -50%) scale(1.06); }
+.edge.armed.next.showing { transform: translate(0, -50%) scale(1.06); }
+
+/* The step indicator. Big, brief, and travelling the way the frame just moved, so a tap
+   or a swipe is acknowledged even when the two photos look alike. */
+#jump {
+  position: absolute;
+  top: 50%;
+  width: var(--chevron);
+  height: var(--chevron);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0.4vmin 1.6vmin rgba(0, 0, 0, 0.65));
+}
+
+#jump svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+#jump.next {
+  right: 5vmin;
+  animation: jump-next 750ms ease-out;
+}
+
+#jump.prev {
+  left: 5vmin;
+  animation: jump-prev 750ms ease-out;
+}
+
+
+@keyframes jump-next {
+  0% { opacity: 0; transform: translate(-45%, -50%); }
+  22% { opacity: 0.92; transform: translate(0, -50%); }
+  100% { opacity: 0; transform: translate(45%, -50%); }
+}
+
+@keyframes jump-prev {
+  0% { opacity: 0; transform: translate(45%, -50%); }
+  22% { opacity: 0.92; transform: translate(0, -50%); }
+  100% { opacity: 0; transform: translate(-45%, -50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #jump.next,
+  #jump.prev {
+    animation-duration: 900ms;
+  }
+}
+
+#toast {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  left: 50%;
+  bottom: var(--toast-bottom);
+  max-width: 92vw;
+  transform: translateX(-50%);
+  padding: 0.55em 1em;
+  border-radius: 0.5em;
+  background: rgba(18, 18, 20, 0.9);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 400;
+  font-size: max(var(--toast-font), var(--toast-font-min));
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+/* Only a toast that offers an action takes taps; the rest stay out of the way. */
+#toast.action {
+  pointer-events: auto;
+}
+
+#toast button {
+  margin-left: 0.6em;
+  padding: 0.2em 0;
+  border: 0;
+  background: none;
+  color: #7db1ff;
+  font: 600 0.92em/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  #toast button:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+#toast.show {
+  opacity: 1;
+}
+
+#toast svg {
+  width: 1.25em;
+  height: 1.25em;
+  flex: none;
+  color: #ff4d6a;
+  fill: none;
+  stroke: currentColor;
+}
+
+#toast svg.filled {
+  fill: currentColor;
+}
+
+/* ---- gallery: the neighbouring photos in the same folder ------------------- */
+
+/* The whole point of the treatment: the photo underneath stays visible as context but
+   recedes, so the grid reads as sitting above the frame rather than replacing it.
+   Desaturated and lifted as well as blurred -- blur alone still leaves a busy, colourful
+   picture competing with the thumbnails. */
+#gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 12, 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(0.35) brightness(1.25);
+  backdrop-filter: blur(24px) saturate(0.35) brightness(1.25);
+  animation: gallery-in 0.22s ease-out;
+}
+
+#gallery[hidden] {
+  display: none;
+}
+
+@keyframes gallery-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#gallery-bar {
+  display: flex;
+  align-items: center;
+  gap: 2vmin;
+  padding: 1.6vmin 2vmin;
+  color: #f2f2f5;
+  font: 400 2.2vmin/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  flex: none;
+}
+
+#gallery-folder {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;      /* keep the tail of a long path */
+  text-align: left;
+  opacity: 0.85;
+}
+
+#gallery-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--control-size);
+  height: var(--control-size);
+  min-width: var(--control-min);
+  min-height: var(--control-min);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+}
+
+#gallery-close svg {
+  width: var(--control-icon);
+  height: var(--control-icon);
+  min-width: var(--control-icon-min);
+  min-height: var(--control-icon-min);
+}
+
+/* body sets touch-action: none so the browser never pans the photo out from under a
+   swipe. Touch-action is intersected all the way down the ancestor chain, so that alone
+   makes the grid unscrollable on a touchscreen however it is styled — the exception has
+   to be made on body itself, only while the grid is up. */
+body.gallery-open {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+#gallery-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  display: grid;
+  /* auto-fill rather than a fixed count: the same rule gives 3 tiles across a phone and
+     6 across a larger screen, without a media query per device. */
+  grid-template-columns: repeat(auto-fill, minmax(min(28vmin, 42vw), 1fr));
+  column-gap: 1.4vmin;
+  row-gap: 1.4vmin;
+  grid-auto-rows: max-content;
+  padding: 0 2vmin 3vmin;
+  align-content: start;
+}
+
+.tile {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 3 / 2;
+  border-radius: 1.2vmin;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* The photo the frame is actually showing, so its place in the run is obvious. */
+.tile.current {
+  outline: 0.4vmin solid #7db1ff;
+  outline-offset: -0.4vmin;
+}
+
+/* Hidden until the tile's render has actually been requested, and gone the moment the
+   photo arrives. Sixty built tiles animating three boxes each — most of them scrolled well
+   out of sight — is real work on a low-powered machine, so only the tiles genuinely
+   waiting on the server get an animation. `:has()` would express this without the class,
+   but the device is on Chrome 95 and does not have it. */
+.tile-loading {
+  display: none;
+  position: absolute;
+  inset: 0;
+  place-items: center;
+  pointer-events: none;
+}
+
+.tile.loading:not(.loaded) .tile-loading {
+  display: grid;
+}
+
+/* The loader's geometry is fixed pixels, so it is scaled as a whole — 112px would swamp a
+   tile that is 168px across on a phone. */
+.tile .loader {
+  transform: scale(0.3);
+}
+
+.tile .box1,
+.tile .box2,
+.tile .box3 {
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.25s ease-out;
+}
+
+.tile img.ready {
+  opacity: 1;
+}
+
+.tile figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2.4vmin 0.8vmin 0.6vmin;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+  color: #fff;
+  font: 400 1.6vmin/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Always visible rather than shown on hover: the device has no pointer to hover with. */
+.tile-actions {
+  position: absolute;
+  top: 0.6vmin;
+  right: 0.6vmin;
+  display: flex;
+  gap: 0.6vmin;
+}
+
+.tile-actions button {
+  display: grid;
+  place-items: center;
+  width: 6.2vmin;
+  height: 6.2vmin;
+  min-width: 34px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  cursor: pointer;
+}
+
+.tile-actions svg {
+  width: 3.2vmin;
+  height: 3.2vmin;
+  min-width: 17px;
+  min-height: 17px;
+  fill: none;
+  stroke: currentColor;
+}
+
+/* Same trap as #controls svg[hidden] above: an <svg> does not honour the hidden
+   attribute on its own, so both halves of each toggle stack up in the one button. */
+.tile-actions svg[hidden] {
+  display: none;
+}
+
+.tile-actions svg.filled {
+  fill: currentColor;
+}
+
+.tile-fav[aria-pressed="true"] {
+  color: #ff4d6a;
+}
+
+/* A hidden photo stays in the grid rather than vanishing: while you are working through a
+   burst, seeing which ones you have already dealt with is the whole point. It goes dark
+   and desaturated, and its button turns into an eye that puts it back. */
+.tile.hidden-photo img {
+  filter: brightness(0.3) saturate(0.25);
+}
+
+.tile.hidden-photo figcaption {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.tile.hidden-photo .tile-hide {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+}
+
+/* Nothing to jump to: the photo is out of the library until it is put back. */
+.tile.hidden-photo {
+  cursor: default;
+}
+
+#gallery-empty {
+  grid-column: 1 / -1;
+  padding: 6vmin 2vmin;
+  text-align: center;
+  color: #9a9aa2;
+  font: 400 2.2vmin/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ---- info: what the camera recorded --------------------------------------- */
+
+/* Same treatment as the gallery, for the same reason: the photo stays as context but
+   stops competing with the text laid over it. */
+#info {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4vmin;
+  background: rgba(10, 10, 12, 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(0.35) brightness(1.25);
+  backdrop-filter: blur(24px) saturate(0.35) brightness(1.25);
+  animation: gallery-in 0.22s ease-out;
+}
+
+#info[hidden] {
+  display: none;
+}
+
+#info-card {
+  width: min(92vw, 78vmin);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.8vmin;
+  background: rgba(18, 18, 20, 0.92);
+  box-shadow: 0 1vmin 4vmin rgba(0, 0, 0, 0.6);
+  color: #f2f2f5;
+  overflow: hidden;
+}
+
+#info-bar {
+  display: flex;
+  align-items: center;
+  gap: 2vmin;
+  padding: 1.6vmin 2vmin;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex: none;
+}
+
+#info-title {
+  flex: 1;
+  min-width: 0;
+  font: 600 2.4vmin/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#info-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--control-size);
+  height: var(--control-size);
+  min-width: var(--control-min);
+  min-height: var(--control-min);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+}
+
+#info-close svg {
+  width: var(--control-icon);
+  height: var(--control-icon);
+  min-width: var(--control-icon-min);
+  min-height: var(--control-icon-min);
+}
+
+#info-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  /* Flex, not grid: fields take the width their own content needs and flow onto the next
+     line when they run out of room. A grid would give "ISO 800" the same column width as
+     a lens name and leave the panel full of gaps. */
+  display: flex;
+  flex-wrap: wrap;
+  align-content: start;
+  gap: 2vmin 4vmin;
+  padding: 2.4vmin;
+  font: 400 2.1vmin/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.field {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+/* The ones whose values run long take a line to themselves rather than dragging the row
+   wide and wrapping three times. */
+.field.wide {
+  flex: 1 0 100%;
+}
+
+/* One line of the panel. The fields sit next to each other and wrap only if the line
+   genuinely runs out of room, so the grouping survives a narrow screen. */
+.info-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2vmin 4vmin;
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
+/* Location and altitude: never split. A long place name is given less room rather than
+   pushing the altitude onto a line of its own. */
+.info-line.tight {
+  flex-wrap: nowrap;
+}
+
+/* Each field takes the width its content needs. The first may shrink (and wrap inside
+   itself) so a long value can never push its neighbour out of the panel. */
+.info-line .field {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.info-line .field + .field {
+  flex: 0 0 auto;
+}
+
+/* The sprite is a definitions block, never drawn. `hidden` would not do it: an <svg>
+   does not honour that attribute, the same trap as the toggle icons above. */
+#icon-sprite {
+  display: none;
+}
+
+#info-rows dt {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: #9a9aa2;
+  font-size: 0.78em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.35em;
+}
+
+/* Lucide draws with strokes and no fill; the symbols carry no styling of their own. */
+#info-rows dt .ico {
+  width: 1.35em;
+  height: 1.35em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#info-rows dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Paths and coordinates: fixed width reads better and makes them easier to check. */
+#info-rows dd.mono {
+  font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.92em;
+}
+
+#info-rows dd a {
+  color: #7db1ff;
+}
+
+#info-empty {
+  grid-column: 1 / -1;
+  padding: 4vmin 0;
+  text-align: center;
+  color: #9a9aa2;
+}
+
+/* The Google Photos link, as a button with the mark inside it on the left. */
+#info-rows .gphotos {
+  display: inline-flex;
+  align-items: center;
+  gap: 1vmin;
+  padding: 0.9vmin 1.8vmin;
+  border-radius: 1vmin;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f2f2f5;
+  text-decoration: none;
+  font: 500 0.95em/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Its field spans the panel; the button itself should not. */
+  justify-self: start;
+  padding: 1.2vmin 2.2vmin;
+}
+
+@media (hover: hover) {
+  #info-rows .gphotos:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+#info-rows .gphotos svg {
+  width: 2.6vmin;
+  height: 2.6vmin;
+  min-width: 15px;
+  min-height: 15px;
+  flex: none;
+}

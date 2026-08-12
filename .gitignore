@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+photoframe.log*
+
+# Both name the host and its ssh key.
+config.json
+CLAUDE.md
