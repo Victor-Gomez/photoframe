@@ -14,9 +14,7 @@ PAGE_DEFAULT = 300
 def weighted_shuffle(ids: list[str], favorites: set[str], weight: int) -> list[str]:
     """Shuffle a pass in which favourites appear `weight` times each.
 
-    Cutting the pass into `weight` segments and giving each segment one copy of every
-    favourite keeps the odds right without ever putting two copies close together: a
-    favourite turns up about once per segment, not twice in a row.
+    One copy per segment keeps the odds right without putting two copies close together.
     """
     plain = [pid for pid in ids if pid not in favorites]
     starred = [pid for pid in ids if pid in favorites]
@@ -56,17 +54,9 @@ def blueprint(frame):
     def playlist():
         """A full shuffled pass, so nothing repeats until everything has shown.
 
-        `?ratio=1.78` — the client's own width/height — is read only for its orientation: a
-        landscape screen gets landscape photos, a portrait one portrait, and anything close
-        to square belongs to both. `?orientation=landscape|portrait` says the same directly.
-        Neither means the whole library.
-
-        It used to match a band around the screen's exact ratio, which sorted the library
-        by the shape of the camera that took each photo — 3:2 from the camera, 16:9 from
-        the phone — a distinction nobody wanted. `object-fit: cover` crops the difference.
-
-        Favourites are not a separate mode: they simply appear `favoriteWeight` times in
-        the pass, so they come round that much more often than everything else.
+        `?ratio=1.78` — the client's own width/height — is read only for its orientation.
+        `?orientation=landscape|portrait` says the same directly. Neither means the whole
+        library. Favourites are not a separate mode: they appear `favoriteWeight` times.
         """
         limit = request.args.get("limit", type=int)
         limit = PAGE_DEFAULT if limit is None else max(0, limit)
@@ -91,24 +81,20 @@ def blueprint(frame):
 
         matched_on = "none"
         if screen > 0:
-            # Orientation, not a band around the screen's exact ratio. A screen is either
-            # landscape or portrait, and so is a photo; matching more finely than that only
-            # sorts the library by how the camera happened to be shaped.
+            # Orientation, not a band around the exact ratio: matching more finely just
+            # sorts the library by the shape of the camera that took each photo.
             want = want if want in ORIENTATIONS else orientation_from(screen)
             items = library.matching(want)
             matched_on = "orientation"
         elif want in ORIENTATIONS:
-            # Asked for by name rather than by a screen's shape, so it is taken literally:
-            # no near-square photos folded in.
+            # Asked for by name, so taken literally: no near-square photos folded in.
             items = library.matching(want, squares=False)
             matched_on = "orientation"
         else:
             items = library.items()
 
-        # The orientation filter reads the aspect index, which is built in the background
-        # when the database gave nothing — so for the first minute after such a restart
-        # every filter matches nothing and the frame is told the library is empty. Showing
-        # unfiltered photos until it catches up beats showing "no photos found".
+        # While the aspect index is still building every filter matches nothing.
+        # Unfiltered photos until it catches up beat "the library is empty".
         if not items and not library.probe_done.is_set():
             items = library.items()
             matched_on = "nothing yet (still indexing)"

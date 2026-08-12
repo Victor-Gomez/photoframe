@@ -1,7 +1,7 @@
 """Hiding and favouriting: the two things the frame writes.
 
-Nothing here touches a file on disk. Hiding a photo records a rule in photos.db and drops
-it from the index in memory; the photo itself is never moved, renamed or deleted.
+Hiding records a rule in photos.db and drops the photo from the index in memory. The file
+is never moved, renamed or deleted.
 """
 
 import logging
@@ -35,9 +35,8 @@ def blueprint(frame):
         rel = PurePosixPath(indexed_photo(data).relative_to(library.root).as_posix())
 
         if scope == "folder":
-            # Only a folder this photo actually sits in, so the endpoint can never be
-            # talked into hiding an arbitrary path — or the whole library. The match also
-            # supplies the folder's real spelling, which is what gets recorded.
+            # Only a folder this photo sits in, so the endpoint cannot be talked into
+            # hiding an arbitrary path. The match also gives the folder's real spelling.
             wanted = normalise_entry(data.get("folder", "")).lower()
             entry = next((a for a in ancestors(rel) if a.lower() == wanted), None)
             if entry is None:
@@ -58,8 +57,8 @@ def blueprint(frame):
     def blacklist_undo():
         """Take an entry back out of the blacklist and return the photo to the library.
 
-        A swipe hides a photo with one careless gesture, and without this the only way back
-        is editing the database by hand — so the frame offers an Undo for a few seconds.
+        A swipe hides a photo with one careless gesture, so the frame offers a few seconds
+        of Undo rather than leaving the database as the only way back.
         """
         data = request.get_json(silent=True) or {}
         entry = normalise_entry(data.get("entry", ""))
@@ -90,10 +89,9 @@ def blueprint(frame):
     def favorite_set():
         """Add or remove the current photo from the favourites.
 
-        A photo can be a favourite because it is listed by name, or because a folder, glob
-        or tag covers it. Un-favouriting therefore drops any entry naming it and, if a
-        broader rule still catches it, records an exception in `unfavorites` — the
-        alternative is a button that silently does nothing on a tagged photo.
+        A photo can be a favourite by name or because a folder, glob or tag covers it.
+        Un-favouriting drops any entry naming it and, if a broader rule still catches it,
+        records an exception — otherwise the button does nothing on a tagged photo.
         """
         data = request.get_json(silent=True) or {}
         rel = PurePosixPath(indexed_photo(data).relative_to(library.root).as_posix())

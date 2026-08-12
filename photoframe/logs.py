@@ -9,18 +9,15 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# How much reaches the log. The frame is stable and nothing ever read the running
-# commentary — a fortnight of it was 2.5MB of routine lines and not one error — so the
-# default keeps failures only, and in practice writes nothing at all. "info" brings the
-# commentary back when something needs diagnosing; "off" writes no file whatsoever.
+# "error" writes failures only, which on a healthy frame means no file at all. "info"
+# brings back the running commentary; "off" writes nothing, tracebacks included.
 LEVELS = {"off": None, "error": logging.WARNING, "info": logging.INFO}
 
-# Every module logs through a child of this one, so a single handler covers them all.
-ROOT = "photoframe"
+ROOT = "photoframe"   # every module logs through a child of this, so one handler covers all
 
 
 def level_from(config_file: Path, env_value: str | None) -> int | None:
-    """Read straight from the file rather than through Settings, which is not built yet."""
+    """Straight from the file: Settings is not built yet, and parsing it is worth logging."""
     choice = env_value
     if not choice:
         try:
@@ -34,15 +31,20 @@ def start(log_file: Path, level: int | None, extra_loggers=()) -> None:
     """Log to a file. Under pythonw.exe there is no stderr at all, so without this every
     warning and traceback the server produces goes nowhere."""
     for logger in (logging.getLogger(ROOT), *extra_loggers):
+        # Loggers are global and outlive a re-import, so without this a second import
+        # stacks a second handler and every line is written twice, then three times.
+        for existing in list(logger.handlers):
+            logger.removeHandler(existing)
+            existing.close()
         if level is None:
-            # A NullHandler and no propagation, rather than simply no handler: otherwise
-            # logging falls back to stderr, which under pythonw.exe does not exist.
+            # NullHandler and no propagation: bare loggers fall back to stderr, which
+            # under pythonw.exe does not exist.
             logger.addHandler(logging.NullHandler())
             logger.propagate = False
             logger.setLevel(logging.CRITICAL + 1)
             continue
-        # delay=True: no file until there is something to put in it, so on a healthy frame
-        # the log does not exist at all and its mere presence means something went wrong.
+        # delay=True: no file until there is something to put in it, so its presence
+        # alone means something went wrong.
         handler = RotatingFileHandler(
             log_file, maxBytes=1_000_000, backupCount=3, encoding="utf-8", delay=True)
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s"))

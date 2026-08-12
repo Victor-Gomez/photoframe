@@ -73,9 +73,8 @@ def probe(path: Path) -> tuple[float, list[str]]:
 class RenderCache:
     """Rendered JPEGs, most recently used last. Memory only — never written to disk.
 
-    Re-viewing a photo — stepping back and forward, or scrolling the gallery over the same
-    burst — is the case this exists for. A photo seen for the first time still pays the
-    full decode; nothing can avoid that.
+    For re-viewing: stepping back and forward, or scrolling the gallery over one burst. A
+    photo seen for the first time still pays the full decode.
     """
 
     def __init__(self, budget_bytes: int):
@@ -144,11 +143,10 @@ class RenderCache:
 
 
 class Renderer:
-    """Scales and crops to exactly the size asked for, by whichever decoder is quicker.
+    """Scales and crops to exactly the size asked for.
 
-    Two decoders rather than one because which is faster is not obvious and changes with
-    the file: `avifdecShare` sends a fraction of renders down each path so they can be
-    compared on real traffic rather than on a benchmark. See /api/render-stats.
+    Two decoders because which is faster changes with the file: `avifdecShare` splits real
+    traffic between them so they can be compared. See /api/render-stats.
     """
 
     SAMPLES = 500
@@ -159,17 +157,15 @@ class Renderer:
         self.avifdec_share = settings.avifdec_share
         self.avifdec_timeout = settings.avifdec_timeout
         self.cache = cache
-        # Each in-flight encode holds a full decoded photo, so the number of them is capped
-        # well below the pool of request threads: decoding a 24 MP photo needs a few hundred
-        # MB for a moment, and eight at once is how the server itself falls over.
+        # Each in-flight encode holds a full decoded photo — a few hundred MB for a 24 MP
+        # one — so this is capped well below the request thread pool.
         self.slots = threading.Semaphore(settings.encode_threads)
         self._times: dict[str, list[float]] = {"pillow": [], "avifdec": []}
         self._times_lock = threading.Lock()
 
     def render(self, source: Path, width: int, height: int) -> bytes:
         """The cached JPEG if there is one, otherwise a fresh one, remembered on the way out."""
-        # Looked up before the semaphore: a hit costs nothing, and queueing it behind real
-        # renders would throw away the whole point of having a cache.
+        # Before the semaphore: a hit costs nothing and must not queue behind real renders.
         key = RenderCache.key(source, width, height)
         data = self.cache.get(key)
         if data is not None:
@@ -218,17 +214,16 @@ class Renderer:
     def _with_avifdec(self, source: Path, width: int, height: int) -> io.BytesIO:
         """Decode with avifdec into a temporary JPEG, then scale that.
 
-        The intermediate is deliberately JPEG rather than PNG: it is a tenth of the bytes to
-        write and read, and Pillow's `draft` can then decode it at a reduced DCT scale,
-        which costs almost nothing. It lives in the system temp directory and is deleted
-        straight away — nothing is ever written next to the photos.
+        JPEG rather than PNG for the intermediate: a tenth of the bytes, and Pillow's
+        `draft` can then decode it at a reduced DCT scale. Written to the system temp
+        directory and deleted in the same call — never next to the photos.
         """
         handle, temporary = tempfile.mkstemp(suffix=".jpg", prefix="photoframe-")
         os.close(handle)
         temporary = Path(temporary)
         try:
-            # subprocess.run kills the child if the timeout expires, so the slot is released
-            # either way. TimeoutExpired is an Exception, so _encode falls back to Pillow.
+            # subprocess.run kills the child on timeout, so the slot is released either
+            # way, and TimeoutExpired sends _encode down the Pillow path.
             subprocess.run(
                 [self.avifdec, "-j", "all", "-q", "92", str(source), str(temporary)],
                 check=True,

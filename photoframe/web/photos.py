@@ -125,16 +125,15 @@ def blueprint(frame):
         else:
             lo, hi = 0, len(siblings)
 
-        # Built once for the whole folder: it snapshots the entire tag map, and rebuilding
-        # it per photo cost 3.5s on a six-thousand-photo shoot.
+        # Once for the whole folder: it snapshots the entire tag map, and rebuilding it
+        # per photo costs seconds on a big shoot.
         favorite = rules.favorite_check()
 
         photos = []
         for name, other_pid in siblings[lo:hi]:
             entry = f"{folder}/{name}" if folder else name
-            # Kept deliberately small: the largest folder here holds over six thousand
-            # photos and every field is paid for that many times. The blacklist entry is
-            # just folder + name, so the grid rebuilds it rather than being sent it twice.
+            # Kept small: a big folder pays for every field thousands of times. The
+            # blacklist entry is folder + name, so the grid rebuilds it rather than be sent it.
             photo = {"id": other_pid, "file": name}
             if favorite(entry.lower(), other_pid):
                 photo["favorite"] = True

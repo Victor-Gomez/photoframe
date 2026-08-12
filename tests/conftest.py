@@ -84,7 +84,10 @@ def make_app(tmp_path, library, monkeypatch):
         conn.close()
 
         monkeypatch.setenv("CONFIG_FILE", str(config_file))
-        for leftover in ("PHOTO_DIR", "FRAME_TOKEN", "DB_FILE"):
+        # Not next to the code: run from a deployed folder the suite would append to the
+        # frame's own log, where a file existing at all is meant to mean something failed.
+        monkeypatch.setenv("LOG_FILE", str(tmp_path / "photoframe.log"))
+        for leftover in ("PHOTO_DIR", "FRAME_TOKEN", "DB_FILE", "LOG_LEVEL"):
             monkeypatch.delenv(leftover, raising=False)
 
         sys.modules.pop("app", None)

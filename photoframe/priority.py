@@ -11,11 +11,9 @@ _THREAD_MODE_BACKGROUND_END = 0x00020000
 def set_background_mode(begin: bool) -> bool:
     """Windows background mode for the calling thread: idle CPU *and* lowest-priority I/O.
 
-    The I/O half is the point. Walking the library opens tens of thousands of file headers,
-    and at normal priority that is enough to starve every other service on the box -- new
-    processes could not even start, so other services went down while the frame itself,
-    already running, carried on answering. Background mode makes the walk yield to anything
-    else that wants the disk: it takes longer and nothing else notices.
+    The I/O half is the point: opening tens of thousands of headers at normal priority
+    starved every other service on the box, to where new processes could not start. This
+    makes the walk yield instead - it takes longer and nothing else notices.
     """
     if not sys.platform.startswith("win"):
         return False

@@ -1,7 +1,7 @@
 """The HTTP surface. One blueprint per group of endpoints, each given what it needs.
 
-Everything in web/ is public — it is both the template folder and the static root — and
-everything outside it is not. That is the boundary this layout keeps.
+web/ is both the template folder and the static root: everything in it is public, and
+everything outside it is not.
 """
 
 import secrets
@@ -23,9 +23,8 @@ def create_app(frame: Frame) -> Flask:
         static_folder=str(WEB_DIR),
         static_url_path="/static",
     )
-    # The page, its stylesheet and its script are read from disk on every request, so
-    # editing them takes effect without restarting anything. The frame itself notices
-    # too — see /api/assets.
+    # Read from disk per request, so editing them needs no restart — and the frame
+    # notices too, see /api/assets.
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0   # revalidate rather than serve a stale asset
     app.jinja_env.auto_reload = True
@@ -53,8 +52,8 @@ def create_app(frame: Frame) -> Flask:
     def database_unavailable(_):
         """Every rule write funnels through Rules.add/remove, so one handler covers them.
 
-        503 rather than a silent success: the device shows the failure, and whatever you
-        starred while the database was out on loan you know was not recorded.
+        503 rather than a silent success: what you starred while the database was on loan,
+        you know was not recorded.
         """
         return jsonify(
             error="la base de datos está en mantenimiento; inténtalo en un momento"), 503

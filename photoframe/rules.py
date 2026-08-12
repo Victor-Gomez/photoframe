@@ -38,10 +38,9 @@ def normalise_entry(raw: str) -> str:
 class Matcher:
     """Tests paths against one list, prepared once instead of per path.
 
-    fnmatch compiles and caches a regex per pattern, but calling it tens of thousands of
-    times to check a handful of plain paths is most of the cost of building a playlist.
-    Plain entries — which is nearly all of them — become set lookups and one startswith
-    over a tuple.
+    fnmatch compiles a regex per pattern, and calling it tens of thousands of times to
+    check a handful of plain paths was most of the cost of building a playlist. Plain
+    entries — nearly all of them — become set lookups and one startswith over a tuple.
     """
 
     __slots__ = ("exact", "prefixes", "names", "globs", "empty")
@@ -50,9 +49,7 @@ class Matcher:
         plain = [e for e in entries if not any(c in e for c in GLOB_CHARS)]
         self.exact = set(plain)
         self.prefixes = tuple(e + "/" for e in plain)  # everything under a listed folder
-        # A bare name matches any segment, so "Screenshots" catches both a top-level folder
-        # and Trip/Day2/Screenshots, whether tested as a folder during the walk or as part
-        # of a full photo path afterwards.
+        # A bare name matches any segment, so "Screenshots" catches it at any depth.
         self.names = {e for e in plain if "/" not in e}
         self.globs = [e for e in entries if any(c in e for c in GLOB_CHARS)]
         self.empty = not entries
@@ -78,9 +75,8 @@ class Rules:
         # the tags belong to the library rather than here.
         self.tags_for = tags_for or (lambda: {})
         self._lock = threading.RLock()
-        # Two views of the same rules. `_raw` is what was written, which is what gets
-        # reported back; `_lists` is normalised and lowercased for matching. Reporting the
-        # normalised form would tell the caller its own "Trip/Day1" came back as "trip/day1".
+        # `_raw` is what was written and what gets reported back; `_lists` is lowercased
+        # for matching. Report the normalised form and "Trip/Day1" comes back "trip/day1".
         self._raw: dict[str, list[str]] = {name: [] for name in SECTION_KIND}
         self._lists: dict[str, list[str]] = {name: [] for name in SECTIONS}
         self._matchers = {name: Matcher([]) for name in SECTIONS}
@@ -89,10 +85,9 @@ class Rules:
     def reload(self) -> None:
         """Re-read the blacklist and favourites from the database.
 
-        With no database open — released for maintenance, or it failed to open at all —
-        the rules already in memory stay in force. Rebuilding them as empty would silently
-        unhide every blacklisted photo, which is the one failure this must never have: a
-        rescan during a release would put every one of them back on the wall.
+        With no database open the rules in memory stay in force. Rebuilding them as empty
+        would silently unhide every blacklisted photo, which is the one failure this must
+        never have.
         """
         conn = self.db.borrow()
         if conn is None:
@@ -107,9 +102,8 @@ class Rules:
                 name: [normalise_entry(e).lower() for e in entries if normalise_entry(e)]
                 for name, entries in raw.items()
             }
-            # "tag:album_japon_2" favours every photo carrying that XMP keyword, which
-            # beats listing forty paths. The prefix keeps it unambiguous against a folder
-            # of the same name. Globs work here too: "tag:album_*".
+            # "tag:holiday" favours every photo carrying that XMP keyword, which beats
+            # listing forty paths. The prefix disambiguates it from a folder of that name.
             for section, tag_section in FAVORITE_SECTIONS.items():
                 paths, patterns = [], []
                 for entry in lists[section]:
@@ -131,8 +125,7 @@ class Rules:
             return list(self._lists[section])
 
     def as_dict(self) -> dict:
-        """What /api/config reports. Read from here rather than from config.json, which
-        held a stale copy of these until the v4 migration and now holds none at all."""
+        """What /api/config reports — from here, not config.json, which holds no rules."""
         with self._lock:
             return {
                 "blacklist": {
@@ -161,8 +154,7 @@ class Rules:
         `unfavorites` wins over `favorites`, so a single photo can be taken back out of a
         sweeping rule like `tag:album_japon_2` without unpicking the rule itself.
 
-        Built once per pass rather than per photo: it copies the whole tag map, and
-        rebuilding it per photo cost 3.5s on a six-thousand-photo folder.
+        Build it once per pass: it copies the whole tag map.
         """
         by_path, not_by_path = self.matcher("favorites"), self.matcher("unfavorites")
         tag_patterns = self.snapshot("favoriteTags")

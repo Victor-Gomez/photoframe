@@ -24,7 +24,7 @@ def build(tmp_path, library, monkeypatch, **settings):
 
 
 def test_the_routine_commentary_is_not_written(tmp_path, library, monkeypatch):
-    """The default. A fortnight of INFO was 2.5MB of routine lines and no errors."""
+    """The default: a healthy frame produces no lines at all."""
     app, log_file = build(tmp_path, library, monkeypatch)
 
     app.app.logger.info("loaded N photos")
@@ -74,3 +74,13 @@ def test_an_unrecognised_level_keeps_failures_rather_than_losing_them(tmp_path, 
 
     app.app.logger.error("avifdec failed on beach.avif")
     assert "avifdec failed" in log_file.read_text(encoding="utf-8")
+
+
+def test_re_importing_does_not_write_every_line_twice(tmp_path, library, monkeypatch):
+    """Loggers are global and outlive the module that configured them, so a second
+    import used to stack a second handler and write everything twice."""
+    app, log_file = build(tmp_path, library, monkeypatch)
+    app, log_file = build(tmp_path, library, monkeypatch)
+
+    app.app.logger.error("avifdec failed on beach.avif")
+    assert log_file.read_text(encoding="utf-8").count("avifdec failed") == 1

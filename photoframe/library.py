@@ -1,8 +1,7 @@
 """The photo list the frame serves from, and how it is built and kept current.
 
 Built from photos.db, which scan.py fills in: every photo with its ratio and tags, so
-starting needs neither a walk of the disk nor a single decode. Walking the library is the
-fallback, and it is much more expensive — see load().
+starting needs neither a walk nor a decode. Walking is the fallback, and far slower.
 """
 
 import hashlib
@@ -20,13 +19,12 @@ log = logging.getLogger(__name__)
 
 SKIP_DIRS = {"@eaDir", "#recycle", "__pycache__"}
 
-# Orientation is a coarse reading of the aspect ratio, for the API and for clients that do
-# not send their own. Squares count as landscape.
+# A coarse reading of the aspect ratio, for clients that do not send their own.
 LANDSCAPE, PORTRAIT = "landscape", "portrait"
 ORIENTATIONS = (LANDSCAPE, PORTRAIT)
 
-# A photo close enough to square reads as neither, and crops acceptably both ways -- so it
-# belongs in both passes rather than being forced into one by a rounding error.
+# Near-square crops acceptably both ways, so it belongs in both passes rather than being
+# forced into one by a rounding error.
 SQUARE_BAND = 0.05
 
 
@@ -54,10 +52,10 @@ def ancestors(rel: PurePosixPath) -> list[str]:
 
 
 class Library:
-    """Which photos exist, where they are, what shape they are and what they are tagged.
+    """Which photos exist, where they are, their shape and their tags.
 
-    Everything here is in memory and rebuilt from photos.db, so the frame keeps serving
-    while the database is released for maintenance.
+    All in memory and rebuilt from photos.db, so the frame keeps serving while the
+    database is released.
     """
 
     def __init__(self, root: Path, db, rules, probe_workers: int = 4):
@@ -68,8 +66,7 @@ class Library:
 
         self._lock = threading.Lock()
         self._paths: dict[str, Path] = {}
-        # pid -> the path relative to the root, lowercased. Kept because deriving it with
-        # Path.relative_to costs 0.6s across a large playlist on a slow CPU.
+        # Kept rather than derived: Path.relative_to costs 0.6s across a large playlist.
         self._rel_lower: dict[str, str] = {}
         # The same paths with their real capitalisation, which is what photos.db is keyed by.
         self._rel_true: dict[str, str] = {}
@@ -130,10 +127,8 @@ class Library:
     def matching(self, want: str, squares: bool = True) -> list[tuple[str, Path]]:
         """Only the photos whose shape suits a screen of that orientation.
 
-        `squares` is the difference between a screen asking by its own ratio and a caller
-        naming an orientation outright. A real screen gets the near-square photos in both
-        passes, since they crop acceptably either way; a caller that asked for "portrait"
-        gets what is actually portrait.
+        A real screen gets the near-square photos either way; a caller that named an
+        orientation outright gets what is actually that shape.
         """
         with self._shape_lock:
             ratios = dict(self._ratio)
@@ -151,9 +146,8 @@ class Library:
     def load(self) -> int:
         """Build the photo list from photos.db: no walk, no decoding.
 
-        scan.py already recorded every photo with its ratio and tags, so the frame has
-        nothing to work out for itself. This is also what makes startup independent of how
-        fast the filesystem happens to be that morning.
+        scan.py recorded every ratio and tag already, which is what makes startup
+        independent of how fast the filesystem happens to be.
         """
         conn = self.db.borrow()
         if conn is None:
@@ -171,8 +165,7 @@ class Library:
         for row in rows:
             rel = row["rel"]
             lower = rel.lower()
-            # Applied here as well, so editing the blacklist takes effect on the next
-            # restart without the database being touched.
+            # Applied here too, so editing the blacklist takes effect on the next restart.
             if self.rules.blacklisted_file(lower) or any(
                 self.rules.blacklisted_dir(part)
                 for part in ancestors(PurePosixPath(lower))
@@ -214,8 +207,7 @@ class Library:
         for root, dirs, files in os.walk(self.root):
             rel_root = Path(root).relative_to(self.root).as_posix()
             prefix = "" if rel_root == "." else rel_root + "/"
-            # Pruned here rather than filtered afterwards: a blacklisted folder is never
-            # descended into at all.
+            # Pruned rather than filtered: a hidden folder is never descended into.
             dirs[:] = [
                 d for d in dirs
                 if not d.startswith(".")
@@ -244,10 +236,8 @@ class Library:
     def probe_all(self) -> None:
         """Read the orientation of every indexed photo out of its header.
 
-        Only reached when photos.db gave nothing. Normally load() sets every ratio without
-        opening a single file — this reads every header off the disk, which takes over a
-        minute. Nothing is cached: the database is the cache, and a second copy of the same
-        facts is what this replaced.
+        Only reached when photos.db gave nothing: load() normally sets every ratio without
+        opening a file. Nothing is cached here — the database is the cache.
         """
         with self._probe_lock, background_io():
             self.probe_done.clear()
@@ -298,8 +288,7 @@ class Library:
             for pid in gone:
                 del self._paths[pid]
                 self._rel_lower.pop(pid, None)
-                # Also the true-case paths, or a hidden photo goes on being offered as a
-                # neighbour by /api/neighbors long after it left the library.
+                # The true-case paths too, or /api/neighbors goes on offering it.
                 self._rel_true.pop(pid, None)
         with self._shape_lock:
             for pid in gone:
@@ -312,10 +301,8 @@ class Library:
     def forget(self, pid: str) -> None:
         """Drop a photo the index knows about but the disk does not.
 
-        The failsafe for building the list from photos.db without a walk: a deleted file is
-        noticed when something tries to serve it, removed from the index in memory, and the
-        frame moves on rather than showing an error. The database is left alone — scan.py
-        owns it, and the next rescan reconciles.
+        The failsafe for starting without a walk: noticed on use, forgotten, moved past.
+        The database is left alone — scan.py owns it and the next rescan reconciles.
         """
         with self._lock:
             self._paths.pop(pid, None)
@@ -362,10 +349,9 @@ class Library:
 class Passes:
     """The shuffled passes clients are paging through.
 
-    A pass is a snapshot of the library, kept server-side because shipping every id up
-    front costs seconds on a slow CPU and the frame only needs the first two to start.
-    Once photos leave the index any client still walking an older pass would be handed ids
-    that no longer exist, so a change throws them all away and clients start a fresh one.
+    Kept server-side because shipping every id up front costs seconds and the frame needs
+    only the first two to start. A change to the library throws them all away, or a client
+    still walking an old pass would be handed ids that no longer exist.
     """
 
     KEPT = 4

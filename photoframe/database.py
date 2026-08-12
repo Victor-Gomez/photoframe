@@ -1,8 +1,7 @@
-"""The connection to photos.db, and the ability to hand the file over and take it back.
+"""The connection to photos.db, and lending the file out.
 
-The frame does not own this database — scan.py and the other library tools do. It reads
-the photo list from it and writes only the blacklist and favourites. That is why a tool
-can ask for the file: see release() below.
+The frame does not own this database — the library tools do. It reads the photo list and
+writes only the blacklist and favourites, which is why a tool can ask for the file.
 """
 
 import logging
@@ -26,8 +25,8 @@ class DatabaseUnavailable(RuntimeError):
 class Database:
     """Owns the sqlite connection and the lock that guards it.
 
-    Callers reach the connection through `borrow()` rather than holding it, so nothing can
-    keep using a connection that release() has closed underneath it.
+    Reached through `borrow()` rather than held, so nothing keeps using a connection that
+    release() closed underneath it.
     """
 
     def __init__(self, path: Path):
@@ -35,9 +34,8 @@ class Database:
         self._lock = threading.RLock()
         self._conn = None
         self._released_at = None
-        # Run after the file comes back, in order. This is how the index and the rules are
-        # rebuilt without database.py having to know they exist — it is also the one place
-        # the module graph would otherwise have a cycle.
+        # Run after the file comes back: how the rules and index above are rebuilt
+        # without this module having to import them.
         self._on_reopen = []
         try:
             self._conn = store.open_db(path)   # creates and migrates an empty one if need be
@@ -53,11 +51,8 @@ class Database:
         self._on_reopen.append(callback)
 
     def borrow(self):
-        """The connection and its lock, for a caller that is about to use both.
-
-        Returns None when the file is not held, which every caller must handle: releasing
-        it is a normal state, not a failure.
-        """
+        """None when the file is not held, which every caller must handle: being released
+        is a normal state, not a failure."""
         with self._lock:
             return self._conn
 
@@ -75,9 +70,8 @@ class Database:
     def release(self) -> bool:
         """Close the database and let go of the file. Serving carries on regardless.
 
-        Everything the slideshow needs is already in memory — the photo list, the ratios,
-        the tags and the rules — so the frame keeps showing photos throughout. Only writes
-        and the info panel need the file, and those say so rather than pretending.
+        Everything the slideshow needs is already in memory. Only writes and the info
+        panel need the file, and those say so rather than pretending.
         """
         with self._lock:
             if self._conn is None:

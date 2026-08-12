@@ -1,14 +1,12 @@
 """Everything the server is made of, wired together in one place.
 
-This is the only module that knows the whole graph. Each piece below is handed exactly
-the collaborators it needs and nothing else:
+The only module that knows the whole graph:
 
     Database  <-  Rules  <-  Library
-                  Renderer <- RenderCache
+    RenderCache <- Renderer
 
-The one place that would otherwise be a cycle is reopening the database: it has to rebuild
-the rules and the index, which both sit above it. Database calls back instead of importing
-them, and the callbacks are registered here.
+Reopening the database is the one place that would otherwise be a cycle — it has to
+rebuild the rules and the index above it, so it calls back rather than imports.
 """
 
 import logging
@@ -30,8 +28,8 @@ class Frame:
         self.rules = Rules(self.db)
         self.library = Library(
             settings.photo_dir, self.db, self.rules, settings.probe_workers)
-        # Closed here rather than passed into Rules' constructor: the tag map belongs to
-        # the library, which does not exist until the rules it filters with do.
+        # Set here, not in the constructor: the library does not exist until the rules
+        # it filters with do.
         self.rules.tags_for = self.library.all_tags
         self.cache = RenderCache(settings.cache_budget)
         self.renderer = Renderer(settings, self.cache)
@@ -46,16 +44,13 @@ class Frame:
     def start(self) -> None:
         """Get the photo list, then keep it current.
 
-        photos.db already lists every photo with its ratio and tags, so the frame needs
-        neither a walk nor a decode to start: the whole library is ready in a couple of
-        seconds. Files deleted since the last scan are handled as they are hit, and a walk
-        still happens on the periodic rescan, which is how new photos arrive.
+        Files deleted since the last scan are handled as they are hit; new ones arrive on
+        the periodic rescan.
         """
         self.db.start_watchdog()
         if not self.library.load():
-            # The database is missing, empty, or has no rel column filled in. Say so
-            # loudly: walking the library is far more expensive — on a slow morning it cost
-            # 25 minutes serving nothing, and once took the whole box down with it.
+            # Missing, empty, or no rel column. Said loudly because the walk below is far
+            # more expensive and has taken the whole box down with it.
             log.error("%s gave no photos — falling back to a full walk of the library",
                       self.settings.db_file.name)
             self.library.scan()

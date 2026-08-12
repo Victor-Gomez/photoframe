@@ -59,17 +59,12 @@ class Settings:
         self.jpeg_quality = min(95, max(40, self("jpegQuality", "JPEG_QUALITY", int)))
         self.encode_threads = max(1, self("encodeThreads", "ENCODE_THREADS", int))
         self.cache_budget = max(0, self("renderCacheMB", "RENDER_CACHE_MB", int)) * 1024 * 1024
-        # libavif's avifdec, if installed. Its dav1d decoder is multithreaded, which
-        # Pillow's AVIF path is not, and on a slow CPU that is worth the process it costs
-        # to start. `avifdecShare` is the fraction of renders it handles, so the two can be
-        # compared on real traffic.
+        # libavif's avifdec, if installed: its dav1d decoder is multithreaded, Pillow's
+        # is not. `avifdecShare` is the fraction of renders it takes, so both get measured.
         self.avifdec = self("avifdec", "AVIFDEC")
         self.avifdec_share = min(1.0, max(0.0, self("avifdecShare", "AVIFDEC_SHARE", float)))
-        # A hung decoder must not hold an encode slot for ever. Without this a single
-        # wedged avifdec parks a slot permanently; the next requests queue on the semaphore
-        # until every request thread is blocked and the frame serves nothing at all --
-        # including the stylesheet. Seen in the wild: a process alive for 15 minutes having
-        # written zero bytes and used zero CPU.
+        # A hung decoder must not hold an encode slot for ever: one wedged avifdec parks
+        # a slot, the rest queue behind it, and the frame stops serving anything at all.
         self.avifdec_timeout = max(5, self("avifdecTimeout", "AVIFDEC_TIMEOUT", int))
 
     def __call__(self, key: str, env: str, cast=str):

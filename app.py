@@ -10,12 +10,8 @@ import os
 import sys
 from pathlib import Path
 
-# The library and everything that describes it live with the photos, not with the frame.
-# This project only shows them: it reads photos.db and writes nothing to it but the
-# blacklist and favourites. Keeping one database rather than a copy here is what stops the
-# two drifting apart, which they already did once.
-# Overridable by environment, like every other path here, because this default is only
-# right on the machine that holds the library.
+# The library and everything describing it live with the photos, not with the frame. One
+# database rather than a copy here: the two drifted apart for a week once.
 LIBRARY_TOOLS = Path(os.environ.get("LIBRARY_TOOLS") or r"D:\Fotos\zTools\metadata")
 if not (LIBRARY_TOOLS / "store.py").is_file():
     raise SystemExit(
@@ -23,7 +19,7 @@ if not (LIBRARY_TOOLS / "store.py").is_file():
         "set LIBRARY_TOOLS to point at it.")
 sys.path.insert(0, str(LIBRARY_TOOLS))
 
-import logging  # noqa: E402  -- after the path is set, like everything below it
+import logging  # noqa: E402  -- everything below needs the path set first
 
 from photoframe import logs  # noqa: E402
 from photoframe.frame import Frame  # noqa: E402
@@ -43,7 +39,7 @@ settings = Settings(CONFIG_FILE)
 frame = Frame(settings)
 app = create_app(frame)
 
-# Handy names for the tests and for anything poking at a running instance.
+# For the tests, and for poking at a running instance.
 library = frame.library
 rules = frame.rules
 db = frame.db
@@ -52,9 +48,7 @@ cache = frame.cache
 
 
 if __name__ != "__main__":
-    # Imported rather than run — tests and tooling expect a ready module, with the photo
-    # list already built so a freshly created library is visible.
-    frame.start()
+    frame.start()   # imported: tests and tooling expect a ready module
 
 
 if __name__ == "__main__":
@@ -62,16 +56,12 @@ if __name__ == "__main__":
 
     from waitress import serve
 
-    # Bind first, index second. The indexing used to run before serve(), so a filesystem
-    # having a bad day meant no frame at all rather than a frame with nothing in it yet:
-    # one morning it took over 25 minutes, during which the device could not even fetch
-    # the stylesheet. /api/playlist already reports `indexing` while the index is empty,
-    # and the frame says "preparing the library..." and retries, which is the right
-    # failure: visibly not ready, rather than dead.
+    # Bind first, index second. Indexing used to run before serve(), so a slow filesystem
+    # meant no frame at all rather than one with nothing in it yet — one morning that was
+    # 25 minutes during which the device could not even fetch the stylesheet.
     threading.Thread(target=frame.start, daemon=True).start()
 
-    # Started with pythonw.exe there is no console at all and sys.stdout is None, which
-    # turns a plain print() into an unhandled error before the server ever starts.
+    # Under pythonw.exe sys.stdout is None, and print() would raise before serve() runs.
     if sys.stdout is not None:
         print(f"photo frame on http://{settings.host}:{settings.port}")
     serve(app, host=settings.host, port=settings.port, threads=8)

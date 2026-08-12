@@ -42,10 +42,9 @@ def blueprint(frame):
     def img(pid: str):
         """The photo, either untouched or re-encoded to exactly the size the screen shows.
 
-        `?w=1920&h=1080` returns a JPEG of precisely those pixels, cropped to fill them the
-        way `object-fit: cover` would. Nothing is written to disk: it is decoded, scaled and
-        encoded per request. A 24 MP original costs a low-powered device ~96 MB of bitmap
-        to decode; the same photo at screen size about 8 MB, which is the difference
+        `?w=1920&h=1080` returns a JPEG of those pixels, cropped as `object-fit: cover`
+        would. Nothing is written to disk. A 24 MP original costs a low-powered device
+        ~96 MB of bitmap to decode against ~8 MB at screen size, which is the difference
         between a frame that runs for weeks and one the browser kills.
 
         Without w and h the original file is sent byte for byte.
@@ -54,15 +53,12 @@ def blueprint(frame):
         if source is None:
             abort(404)
         if not source.exists():
-            # Starting from photos.db without a walk means a file can be gone while the
-            # list still names it.
-            frame.library.forget(pid)
+            frame.library.forget(pid)   # gone from disk, still named by the database
             abort(404)
 
         width, height = request.args.get("w", type=int), request.args.get("h", type=int)
         if not width or not height:
-            # Explicit mimetype: the Windows mime registry has no .webp/.avif entry and
-            # would otherwise fall back to application/octet-stream.
+            # Explicit mimetype: the Windows mime registry has no .webp/.avif entry.
             return send_file(
                 source,
                 mimetype=SOURCE_MIME[source.suffix.lower()],

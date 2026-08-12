@@ -123,6 +123,7 @@ def test_a_malformed_config_falls_back_to_defaults_without_rewriting_it(
     broken = tmp_path / "config.json"
     broken.write_text("{ not json", encoding="utf-8")
     monkeypatch.setenv("CONFIG_FILE", str(broken))
+    monkeypatch.setenv("LOG_FILE", str(tmp_path / "photoframe.log"))
     monkeypatch.setenv("PHOTO_DIR", str(library))
     # Its own empty database, or the test opens the real library's one.
     monkeypatch.setenv("DB_FILE", str(tmp_path / "photos.db"))
@@ -142,6 +143,7 @@ def test_a_config_with_a_byte_order_mark_still_parses(tmp_path, library, monkeyp
     body = json.dumps({"photoDir": str(library), "slideSeconds": 42})
     with_bom.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
     monkeypatch.setenv("CONFIG_FILE", str(with_bom))
+    monkeypatch.setenv("LOG_FILE", str(tmp_path / "photoframe.log"))
     # Its own empty database. Without this the test opens the real library's one.
     monkeypatch.setenv("DB_FILE", str(tmp_path / "photos.db"))
     monkeypatch.delenv("PHOTO_DIR", raising=False)
