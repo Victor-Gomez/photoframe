@@ -70,10 +70,8 @@ def blueprint(frame):
         rules.remove("files" if scope == "photo" else "folders", entry)
 
         if scope == "folder":
-            # A folder was pruned from the walk entirely, so the index has to be rebuilt.
-            count = library.scan()
-            library.probe_in_background()
-            return jsonify(entry=entry, scope=scope, count=count)
+            # A folder was pruned from the index entirely, so it has to be rebuilt.
+            return jsonify(entry=entry, scope=scope, count=library.refresh())
 
         path = library.root / entry
         if not path.is_file() or path.suffix.lower() not in EXTENSIONS:

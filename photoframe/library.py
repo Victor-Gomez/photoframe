@@ -8,7 +8,6 @@ import hashlib
 import logging
 import os
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
@@ -194,6 +193,23 @@ class Library:
                  len(found), self.db.path.name, len(ratios), len(tags))
         return len(found)
 
+    def refresh(self) -> int:
+        """The photo list again from photos.db, walking only if it gives nothing.
+
+        scan.py keeps the database current, so a rescan is a reload. Walking re-reads
+        every header and empties the aspect index while it runs, and a playlist built in
+        that window matches nothing and comes back unfiltered.
+        """
+        count = self.load()
+        if not count:
+            # Missing, empty, or no rel column. Said loudly because the walk is far more
+            # expensive and has taken the whole box down with it.
+            log.error("%s gave no photos — falling back to a full walk of the library",
+                      self.db.path.name)
+            count = self.scan()
+            self.probe_in_background()
+        return count
+
     def scan(self) -> int:
         """Walk the disk instead. Only reached when the database gave nothing."""
         with background_io():
@@ -332,19 +348,6 @@ class Library:
         except Exception:
             log.warning("restored %s but could not read its header", path)
         return pid
-
-    def rescan_loop(self, minutes: int) -> None:
-        while True:
-            time.sleep(minutes * 60)
-            if not self.db.is_open:
-                log.info("skipping the rescan: the database is released")
-                continue
-            try:
-                self.scan()
-                self.probe_all()
-            except Exception:
-                log.exception("rescan failed")
-
 
 class Passes:
     """The shuffled passes clients are paging through.

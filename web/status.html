@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marco de fotos · estado</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e8e8ea;
+      --dim: #8b8b93;
+      --line: #2a2a2f;
+      --panel: #17171a;
+      --good: #7bd88f;
+      --warn: #e8c46a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 1.4rem 1.1rem 4rem;
+      background: #0d0d0f;
+      color: var(--ink);
+      font: 15px/1.5 system-ui, sans-serif;
+    }
+
+    main { max-width: 56rem; margin: 0 auto; }
+
+    h1 { font-size: 1.25rem; margin: 0; }
+
+    h2 {
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--dim);
+      margin: 2.2rem 0 .6rem;
+      font-weight: 600;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    a { color: #8ab4ff; }
+
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+      gap: .7rem;
+      margin-top: 1.1rem;
+    }
+
+    .tile {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: .6rem;
+      padding: .7rem .85rem;
+    }
+
+    .tile b { display: block; font-size: 1.35rem; font-weight: 600; }
+
+    .tile span { color: var(--dim); font-size: .8rem; }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    td {
+      padding: .34rem .6rem .34rem 0;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    td:first-child { color: var(--dim); width: 13rem; }
+
+    .good { color: var(--good); }
+
+    .warn { color: var(--warn); }
+
+    details { border-bottom: 1px solid var(--line); padding: .34rem 0; }
+
+    summary { cursor: pointer; color: var(--dim); }
+
+    details ul { margin: .5rem 0 .3rem; padding-left: 1.2rem; }
+
+    details li { font-family: ui-monospace, monospace; font-size: .82rem; }
+
+    pre {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: .6rem;
+      padding: .8rem;
+      margin: 0;
+      max-height: 26rem;
+      overflow: auto;
+      font-size: .78rem;
+      line-height: 1.45;
+      white-space: pre;
+    }
+
+    .empty { color: var(--dim); }
+  </style>
+</head>
+
+<body>
+  <main>
+    <header>
+      <h1>Marco de fotos</h1>
+      <a href="/status">Actualizar</a>
+    </header>
+
+    <div class="tiles">
+      <div class="tile"><b>{{ uptime }}</b><span>encendido</span></div>
+      <div class="tile"><b>{{ "{:,}".format(photos).replace(",", ".") }}</b><span>fotos
+          {%- if indexing %} · indexando{% endif %}</span></div>
+      <div class="tile">
+        <b class="{{ 'good' if db.open else 'warn' }}">{{ "abierta" if db.open else "cedida" }}</b>
+        <span>base de datos</span>
+      </div>
+      <div class="tile"><b>{{ renders.cache.hitRate }}</b><span>aciertos de caché</span></div>
+    </div>
+
+    <h2>Biblioteca</h2>
+    <table>
+      <tr><td>Carpeta</td><td>{{ root }}</td></tr>
+      <tr><td>Horizontales</td><td>{{ orientations.landscape }}</td></tr>
+      <tr><td>Verticales</td><td>{{ orientations.portrait }}</td></tr>
+      <tr><td>Índice de formas</td>
+        <td>{{ "construyéndose" if indexing else "listo" }}</td></tr>
+    </table>
+
+    <h2>Base de datos</h2>
+    <table>
+      <tr><td>Archivo</td><td>{{ db.file }}</td></tr>
+      <tr><td>Estado</td>
+        <td class="{{ 'good' if db.open else 'warn' }}">
+          {%- if db.open %}abierta
+          {%- else %}cedida hace {{ db.releasedFor }} s · se recupera sola a los {{ db.timeout }} s
+          {%- endif %}</td></tr>
+    </table>
+
+    <h2>Renders</h2>
+    <table>
+      <tr><td>Veredicto</td><td>{{ renders.verdict }}</td></tr>
+      {% for name in ("pillow", "avifdec") %}
+      {% set method = renders[name] %}
+      <tr><td>{{ name }}</td>
+        <td>
+          {%- if method.renders %}{{ method.renders }} renders · mediana {{ method.medianMs }} ms ·
+          p90 {{ method.p90Ms }} ms · de {{ method.fastestMs }} a {{ method.slowestMs }} ms
+          {%- else %}sin renders todavía{% endif %}</td></tr>
+      {% endfor %}
+      <tr><td>avifdec</td><td>{{ renders.avifdecPath }} · cuota {{ renders.avifdecShare }}</td></tr>
+      <tr><td>Caché</td>
+        <td>{{ renders.cache.entries }} fotos · {{ renders.cache.mb }} de
+          {{ renders.cache.budgetMB }} MB · {{ renders.cache.hits }} aciertos,
+          {{ renders.cache.misses }} fallos</td></tr>
+    </table>
+
+    <h2>Reglas</h2>
+    <table>
+      {% for label, entries in (("Carpetas ocultas", rules.blacklist.folders),
+                                ("Fotos ocultas", rules.blacklist.files),
+                                ("Favoritas", rules.favorites),
+                                ("Excepciones", rules.unfavorites)) %}
+      <tr><td colspan="2" style="padding:0">
+          <details>
+            <summary>{{ label }} ({{ entries|length }})</summary>
+            {% if entries %}<ul>{% for entry in entries|sort %}<li>{{ entry }}</li>{% endfor %}</ul>{% endif %}
+          </details>
+        </td></tr>
+      {% endfor %}
+    </table>
+
+    <h2>Ajustes</h2>
+    <table>
+      {% for key, value in settings|dictsort %}
+      <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+      {% endfor %}
+    </table>
+
+    <h2>Registro · últimas {{ log|length }} líneas</h2>
+    {% if log %}
+    <pre>{{ log|join("
+") }}</pre>
+    {% else %}
+    <p class="empty">Vacío. Con <code>logLevel</code> en <code>error</code> eso es lo normal:
+      el archivo sólo existe si algo ha fallado.</p>
+    {% endif %}
+  </main>
+</body>
+
+</html>

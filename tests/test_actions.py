@@ -1,6 +1,7 @@
 """Hiding, undoing and favouriting: everything that writes a rule into photos.db."""
 
 import json
+import logging
 
 import pytest
 from photoframe.imaging import MAX_RENDER_EDGE
@@ -256,6 +257,22 @@ def test_the_database_can_stand_in_for_a_walk(make_app):
     assert app.library.probe_done.is_set()        # and nothing is left to read off the disk
 
 
+def test_a_rescan_reloads_the_database_rather_than_walking(make_app, monkeypatch):
+    """The rescan used to walk the disk and re-probe every header. probe_all empties the
+    aspect index first, so for as long as it ran the playlist matched nothing and served
+    portrait photos to a landscape screen. It is asked for by hand now, and scan.py has
+    already recorded everything it could find."""
+    app = make_app()
+    seed_photos(app, {"Trip/Day1/beach.avif": 1.5, "Trip/Day2/pano.avif": 2.0})
+    walked = []
+    monkeypatch.setattr(app.library, "scan", lambda: walked.append(True))
+
+    body = app.app.test_client().post("/api/rescan").get_json()
+    assert not walked
+    assert body["count"] == 2
+    assert app.library.ratio_of(photo_id_of("Trip/Day1/beach.avif")) == 1.5
+
+
 def test_a_photo_deleted_from_disk_is_dropped_when_it_is_next_wanted(app):
     """The failsafe for starting from the database without a walk: notice on use, forget,
     and move on rather than showing an error."""
@@ -277,6 +294,25 @@ def test_the_blacklist_still_applies_when_starting_from_the_database(make_app):
     app.library.load()
     assert photo_id_of("Trip/Day1/beach.avif") not in dict(app.library.items())
     assert photo_id_of("Trip/Day2/pano.avif") in dict(app.library.items())
+
+
+def test_the_status_page_answers_what_an_ssh_session_used_to(client, app):
+    """/api/db, /api/render-stats, /api/config and the log file, on one page: the frame
+    runs headless on a machine across the house."""
+    page = client.get("/status").get_data(as_text=True)
+
+    assert str(app.settings.photo_dir) in page
+    assert str(app.db.path) in page
+    assert "aciertos de caché" in page
+    assert f"{len(app.library)}" in page
+
+
+def test_the_status_page_carries_the_tail_of_the_log(client, app):
+    """The log lives on the frame's own disk, so a page that omitted it would still leave
+    the one question worth asking — what went wrong — behind an ssh session."""
+    logging.getLogger("photoframe").error("una prueba escribió esto")
+
+    assert "una prueba escribió esto" in client.get("/status").get_data(as_text=True)
 
 
 def test_api_config_reports_the_rules_the_frame_is_enforcing(client, app):

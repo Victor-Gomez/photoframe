@@ -21,7 +21,7 @@ on the fly and keeps nothing on disk.
 | `photoframe/imaging.py` | reading headers, rendering to screen size, the in-memory cache |
 | `photoframe/frame.py` | wires the above together — the only module that knows the whole graph |
 | `photoframe/web/` | the HTTP surface, one blueprint per group of endpoints |
-| `web/` | the page — `frame.html`, `frame.css`, `frame.js`, re-read from disk on every request |
+| `web/` | the page — `frame.html`, `frame.css`, `frame.js`, and `status.html`, re-read from disk on every request |
 | `config.json` | settings only — ports, timings, paths |
 | `tests/` | the suite. `python -m pytest` |
 
@@ -78,7 +78,6 @@ blacklist — belongs to the library rather than to this program. `LIBRARY_TOOLS
 | `logLevel` | `error` (the default) writes failures only, which on a healthy frame means an empty file. `info` adds the running commentary — reach for it when diagnosing. `off` writes nothing at all, including tracebacks. |
 | `slideSeconds` | Seconds per photo. |
 | `favoriteWeight` | How many times more often a favourite comes round. `1` disables it. |
-| `rescanMinutes` | How often the library is re-checked for new photos. |
 | `jpegQuality` | Quality of the JPEG sent to the frame. |
 | `encodeThreads` | How many photos may be rendered at once. Each holds a decoded photo, so it stays well below the request thread pool. |
 | `avifdec` | Path to libavif's `avifdec`. Its dav1d decoder is multithreaded, which Pillow's is not — measured 849ms vs 1160ms at the median on this library. Falls back to Pillow if it fails. |
@@ -141,6 +140,12 @@ The ⋮ menu on the frame writes these for you.
   and on a morning when the filesystem was crawling it took over 25 minutes, during which
   the device couldn't even fetch the stylesheet. If the database is missing or empty the
   frame falls back to walking the library in the background, while already serving.
+- **The photo list is read once, at startup.** Nothing re-walks the library on a timer:
+  `photos.db` is written by the library's own tools, not by the frame, so there is nothing
+  to discover on a schedule. New photos arrive when `/api/db/resume` hands the database
+  back after a sync, on `POST /api/rescan`, or on the next start. Walking the disk is only
+  ever the fallback for a database that gave nothing — it re-reads every header and leaves
+  the aspect index empty while it runs.
 - A photo listed in the database but missing from disk is dropped the first time something
   asks for it, so a deletion shows as the next photo rather than an error.
 - **Orientation matching, and nothing finer.** A landscape screen gets landscape photos, a
@@ -187,6 +192,12 @@ frame keeps showing photos throughout: the photo list, ratios, tags and rules ar
 already in memory. Only writes and the info panel need the file, and those say so —
 favouriting answers **503** rather than reporting a success it did not record. If whatever
 released it dies, the frame takes the database back on its own after 15 minutes.
+
+**`/status` is the frame's own health page.** Uptime, how many photos and of which shape,
+whether the database is held or on loan, the two decoders' medians, the render cache's hit
+rate, the rules in force, the live settings and the tail of the log — everything the JSON
+endpoints report, on one page. The frame runs headless on a machine across the house, and
+"is it still up, and did anything go wrong?" used to mean an ssh session.
 
 **Don't blacklist or favourite from the device while `scan.py` or `faces.py` is running.**
 Both write `photos.db`. WAL mode means readers never block, but two writers racing on the

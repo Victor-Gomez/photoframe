@@ -10,7 +10,7 @@ rebuild the rules and the index above it, so it calls back rather than imports.
 """
 
 import logging
-import threading
+import time
 
 from .database import Database
 from .imaging import RenderCache, Renderer
@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 class Frame:
     def __init__(self, settings: Settings):
         self.settings = settings
+        self.started = time.time()   # what /status reports: "did it restart in the night?"
         self.db = Database(settings.db_file)
         self.rules = Rules(self.db)
         self.library = Library(
@@ -42,21 +43,11 @@ class Frame:
         log.info("database reopened: %d photos", count)
 
     def start(self) -> None:
-        """Get the photo list, then keep it current.
+        """Read the photo list, once.
 
-        Files deleted since the last scan are handled as they are hit; new ones arrive on
-        the periodic rescan.
+        photos.db is the library tools' to write, so nothing here re-walks the disk on a
+        timer. A photo deleted since is dropped when it is next asked for; new ones arrive
+        when the database is handed back (/api/db/resume) or on /api/rescan.
         """
         self.db.start_watchdog()
-        if not self.library.load():
-            # Missing, empty, or no rel column. Said loudly because the walk below is far
-            # more expensive and has taken the whole box down with it.
-            log.error("%s gave no photos — falling back to a full walk of the library",
-                      self.settings.db_file.name)
-            self.library.scan()
-            self.library.probe_in_background()
-        threading.Thread(
-            target=self.library.rescan_loop,
-            args=(self.settings.rescan_minutes,),
-            daemon=True,
-        ).start()
+        self.library.refresh()

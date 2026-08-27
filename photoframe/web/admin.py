@@ -1,10 +1,28 @@
 """Endpoints for looking after the frame rather than for showing photos."""
 
 import logging
+import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
+
+from .. import logs
 
 log = logging.getLogger(__name__)
+
+LOG_LINES = 200
+
+
+def uptime(started: float) -> str:
+    """In the largest unit that still says something: "3 d 4 h", not 273,600 s."""
+    seconds = int(time.time() - started)
+    minutes, hours = seconds // 60, seconds // 3600
+    if seconds < 90:
+        return f"{seconds} s"
+    if hours < 1:
+        return f"{minutes} min"
+    if hours < 48:
+        return f"{hours} h {minutes % 60} min"
+    return f"{hours // 24} d {hours % 24} h"
 
 
 def blueprint(frame):
@@ -13,9 +31,34 @@ def blueprint(frame):
 
     @bp.post("/api/rescan")
     def rescan_now():
-        count = library.scan()
-        library.probe_in_background()
-        return jsonify(count=count)
+        """Pick up whatever scan.py has recorded since: a reload, not a walk."""
+        return jsonify(count=library.refresh())
+
+    def report() -> dict:
+        settings.reload()
+        shown = dict(settings.values)
+        shown["frameToken"] = "(set)" if settings.token else ""
+        return {
+            "uptime": uptime(frame.started),
+            "photos": len(library),
+            "orientations": library.orientation_counts(),
+            "indexing": not library.probe_done.is_set(),
+            "root": str(settings.photo_dir),
+            "db": db.state(),
+            "renders": frame.renderer.stats(),
+            "rules": rules.as_dict(),
+            "settings": shown,
+            "log": logs.tail(LOG_LINES),
+        }
+
+    @bp.get("/status")
+    def status_page():
+        """Everything the JSON endpoints below report, on one page.
+
+        The frame runs headless on a machine across the house; answering "is it still
+        up, and did anything go wrong?" used to mean an ssh session and a log file.
+        """
+        return render_template("status.html", **report())
 
     @bp.get("/api/config")
     def config_view():
