@@ -16,6 +16,164 @@
   const clock = document.getElementById('clock');
   const pathLabel = document.getElementById('path');
 
+  /* ---- words --------------------------------------------------------------
+   *
+   *  The frame keeps its own catalogue rather than being sent one. It changes language
+   *  from the settings poll, with no reload, and must be able to say "reconnecting" while
+   *  the server is exactly what it cannot reach. The server's own two pages are
+   *  translated in photoframe/i18n.py; the two catalogues barely overlap.
+   */
+  const TEXT = {
+    es: {
+      months: ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+               'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
+      smaller: 'mostrando versiones reducidas',
+      reconnecting: 'reconectando…',
+      preparing: 'preparando la biblioteca…',
+      noPhotos: 'no hay fotos',
+      nothingToShow: 'no hay fotos que mostrar',
+      undo: 'Deshacer',
+      unreadable: 'no se ha podido leer esta foto',
+      hideFolder: folder => `Ocultar ${folder}`,
+      hidden: (entry, count) => `Oculta ${entry} · ${count} foto${count === 1 ? '' : 's'}`,
+      hideFailed: 'no se ha podido ocultar',
+      restored: entry => `Restaurada ${entry}`,
+      offline: 'no se ha podido contactar con el servidor',
+      exitFullscreen: 'Pulsa F11 para salir de pantalla completa',
+      fullscreenDenied: 'pantalla completa denegada',
+      pathCopied: 'Ruta copiada',
+      pathNotCopied: 'No se ha podido copiar la ruta',
+      favorited: 'Añadida a favoritas',
+      unfavorited: 'Quitada de favoritas',
+      libraryRoot: 'raíz de la biblioteca',
+      folderCount: (folder, total) => `${folder} · ${total} foto${total === 1 ? '' : 's'}`,
+      folderFailed: 'no se ha podido cargar la carpeta',
+      detailsFailed: 'no se han podido leer los detalles',
+      noDetails: 'esta foto no tiene datos registrados',
+      'row.date': 'Fecha',
+      'row.size': 'Tamaño',
+      'row.weight': 'Peso',
+      'row.camera': 'Cámara',
+      'row.lens': 'Objetivo',
+      'row.exposure': 'Parámetros',
+      'row.place': 'Ubicación',
+      'row.altitude': 'Altitud',
+      'row.people': 'Personas',
+      'row.tags': 'Etiquetas',
+      'row.path': 'Ruta',
+      'ui.fullscreen': 'Pantalla completa',
+      'ui.fullscreenAria': 'Alternar pantalla completa',
+      'ui.favorite': 'Favorita',
+      'ui.favoriteAdd': 'Añadir a favoritas',
+      'ui.favoriteRemove': 'Quitar de favoritas',
+      'ui.more': 'Más',
+      'ui.moreAria': 'Más opciones',
+      'ui.close': 'Cerrar',
+      'ui.hide': 'Ocultar',
+      'menu.hidePhoto': 'Ocultar esta foto',
+      'menu.gallery': 'Fotos cercanas',
+      'menu.info': 'Información',
+      'menu.settings': 'Ajustes',
+      'menu.cancel': 'Cancelar',
+      'edge.prev': 'Anterior',
+      'edge.unfavorite': 'Quitar',
+      'ui.title': 'Marco de fotos',
+      'edge.next': 'Siguiente',
+      'info.aria': 'Información de la foto',
+      'gphotos': 'Google Fotos',
+    },
+    en: {
+      months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      smaller: 'showing smaller versions',
+      reconnecting: 'reconnecting…',
+      preparing: 'preparing the library…',
+      noPhotos: 'no photos',
+      nothingToShow: 'nothing to show',
+      undo: 'Undo',
+      unreadable: 'could not read this photo',
+      hideFolder: folder => `Hide ${folder}`,
+      hidden: (entry, count) => `Hidden ${entry} · ${count} photo${count === 1 ? '' : 's'}`,
+      hideFailed: 'could not hide that',
+      restored: entry => `Restored ${entry}`,
+      offline: 'could not reach the server',
+      exitFullscreen: 'Press F11 to leave fullscreen',
+      fullscreenDenied: 'fullscreen refused',
+      pathCopied: 'Path copied',
+      pathNotCopied: 'Could not copy the path',
+      favorited: 'Added to favourites',
+      unfavorited: 'Removed from favourites',
+      libraryRoot: 'the library root',
+      folderCount: (folder, total) => `${folder} · ${total} photo${total === 1 ? '' : 's'}`,
+      folderFailed: 'could not load the folder',
+      detailsFailed: 'could not read the details',
+      noDetails: 'nothing was recorded about this photo',
+      'row.date': 'Date',
+      'row.size': 'Size',
+      'row.weight': 'Weight',
+      'row.camera': 'Camera',
+      'row.lens': 'Lens',
+      'row.exposure': 'Exposure',
+      'row.place': 'Place',
+      'row.altitude': 'Altitude',
+      'row.people': 'People',
+      'row.tags': 'Tags',
+      'row.path': 'Path',
+      'ui.fullscreen': 'Fullscreen',
+      'ui.fullscreenAria': 'Toggle fullscreen',
+      'ui.favorite': 'Favourite',
+      'ui.favoriteAdd': 'Add to favourites',
+      'ui.favoriteRemove': 'Remove from favourites',
+      'ui.more': 'More',
+      'ui.moreAria': 'More options',
+      'ui.close': 'Close',
+      'ui.hide': 'Hide',
+      'menu.hidePhoto': 'Hide this photo',
+      'menu.gallery': 'Nearby photos',
+      'menu.info': 'Information',
+      'menu.settings': 'Settings',
+      'menu.cancel': 'Cancel',
+      'edge.prev': 'Previous',
+      'edge.unfavorite': 'Remove',
+      'ui.title': 'Photo frame',
+      'edge.next': 'Next',
+      'info.aria': 'Photo information',
+      'gphotos': 'Google Photos',
+    },
+  };
+
+  // This device may speak something other than the frame does. The server renders the
+  // page in it, so the markup already says which — but read the cookie too, because the
+  // settings poll must not undo a choice made on this screen.
+  const deviceLang = () => (document.cookie.match(/(?:^|;\s*)frame_lang=([a-z]{2})/) || [])[1] || '';
+
+  let lang = deviceLang() || (document.documentElement.lang === 'en' ? 'en' : 'es');
+
+  /** One string. Missing keys fall back to Spanish, then to the key, so a half-translated
+   *  catalogue shows the key rather than `undefined` on the wall. */
+  function t(key, ...values) {
+    const word = TEXT[lang][key] ?? TEXT.es[key] ?? key;
+    return typeof word === 'function' ? word(...values) : word;
+  }
+
+  /** Write the catalogue into the page. `data-t` sets the text, `data-t-title` the
+   *  tooltip, `data-t-aria` the label. Templates are walked too: their contents are
+   *  cloned long after this runs. */
+  function applyTo(root) {
+    for (const node of root.querySelectorAll('[data-t]')) node.textContent = t(node.dataset.t);
+    for (const node of root.querySelectorAll('[data-t-title]')) node.title = t(node.dataset.tTitle);
+    for (const node of root.querySelectorAll('[data-t-aria]')) {
+      node.setAttribute('aria-label', t(node.dataset.tAria));
+    }
+  }
+
+  function applyLanguage() {
+    document.documentElement.lang = lang;
+    applyTo(document);
+    for (const template of document.querySelectorAll('template')) applyTo(template.content);
+    if (currentId) showHeart(isFavorite);   // its label is one of the translated ones
+  }
+
   // Ask for exactly the pixels this screen paints, and no more. A 24 MP original costs
   // roughly 96 MB of decoded bitmap; the same photo at panel size costs about 8 MB, and
   // two of those are alive at once during a crossfade. The server crops and encodes per
@@ -197,7 +355,7 @@
       photo.src = src(id);
       await capped(loaded(photo).catch(() => { }), 20000);
       if (mine !== prepareSeq) throw new Error('superseded');
-      if (photo.naturalWidth) say('mostrando versiones reducidas');
+      if (photo.naturalWidth) say(t('smaller'));
     }
     if (!photo.naturalWidth) throw new Error('unreadable');
     // The expensive part for AVIF. Done here, well ahead of the swap, but still
@@ -341,7 +499,7 @@
 
       if (result.offline) {
         ready = queue();
-        await stall('reconectando…', 5000);
+        await stall(t('reconnecting'), 5000);
         continue;
       }
       if (result.empty) {
@@ -349,15 +507,15 @@
         // A server that is still building its index has nothing to offer yet, which is
         // not the same as a library with no photos in it — and it is worth asking again
         // in seconds rather than half a minute.
-        if (indexing) await stall('preparando la biblioteca…', 3000);
-        else await stall('no hay fotos', 30000);
+        if (indexing) await stall(t('preparing'), 3000);
+        else await stall(t('noPhotos'), 30000);
         continue;
       }
       if (result.failed) {
         // Corrupt or unreadable file: skip on quickly. A long run of these would
         // otherwise leave a silent black screen, so say something after a while.
         ready = queue();
-        if (++misses >= 10) await stall('no hay fotos que mostrar', 5000);
+        if (++misses >= 10) await stall(t('nothingToShow'), 5000);
         else await wait(200);
         continue;
       }
@@ -435,7 +593,64 @@
   // does not gate the reveal — a browser that mis-reports visibility would otherwise leave
   // the frame showing its loader forever.
   const interacting = () => menuOpen || touching || galleryOpen || infoOpen;
-  const holding = () => interacting() || document.hidden;
+  const holding = () => interacting() || document.hidden || asleep();
+
+  /* ---- quiet hours -------------------------------------------------------- */
+
+  // A dark room does not need a lit wall, and a screen nobody is looking at still costs a
+  // full render every slide, all night. Between these two times the frame fades to black
+  // and stops advancing — the same hold a hidden page takes, so it does not gate the
+  // reveal either. Set from the settings page and polled, so changing them reaches the
+  // wall without anyone walking over.
+  const WAKE = 5 * 60 * 1000;
+  let quietFrom = '', quietTo = '', wakeUntil = 0;
+
+  const asMinutes = clock => {
+    const [hours, mins] = String(clock).split(':');
+    return (+hours) * 60 + (+mins);
+  };
+
+  function quietNow() {
+    if (!quietFrom || !quietTo) return false;
+    const now = new Date();
+    const here = now.getHours() * 60 + now.getMinutes();
+    const from = asMinutes(quietFrom), to = asMinutes(quietTo);
+    // The window nearly always wraps past midnight, so it is two ranges, not one.
+    return from <= to ? (here >= from && here < to) : (here >= from || here < to);
+  }
+
+  const asleep = () => quietNow() && Date.now() > wakeUntil;
+
+  function paintNight() {
+    document.body.classList.toggle('asleep', asleep());
+    releaseHold();   // the window may have just ended, or a tap may have just ended it
+  }
+
+  // Someone standing in front of it at three in the morning wants to see a photo, not a
+  // black rectangle that ignores them.
+  function wake() {
+    if (!quietNow()) return;
+    wakeUntil = Date.now() + WAKE;
+    paintNight();
+  }
+
+  addEventListener('touchstart', wake, { passive: true, capture: true });
+  addEventListener('mousedown', wake, { capture: true });
+  addEventListener('keydown', wake, { capture: true });
+
+  async function readSettings() {
+    try {
+      const data = await (await fetch('/api/settings', { cache: 'no-store' })).json();
+      quietFrom = data.quietFrom || '';
+      quietTo = data.quietTo || '';
+      if (data.slideSeconds) slide = data.slideSeconds * 1000;
+      if (!deviceLang() && data.language && data.language !== lang && TEXT[data.language]) {
+        lang = data.language;
+        applyLanguage();
+      }
+    } catch { /* the server will be back; what was read last still stands */ }
+    paintNight();
+  }
 
   let waiters = [];
 
@@ -465,7 +680,7 @@
     toast.onclick = null;
     if (undo) {
       const button = document.createElement('button');
-      button.textContent = 'Deshacer';
+      button.textContent = t('undo');
       // A swipe down finishes with the finger at the bottom of the screen — exactly where
       // this appears. Without a moment's delay the follow-through, or the next tap to move
       // on, lands on Undo and quietly puts back what was just hidden.
@@ -505,13 +720,13 @@
       for (const folder of info.folders) {
         const item = document.createElement('button');
         item.role = 'menuitem';
-        item.textContent = `Ocultar ${folder}`;
+        item.textContent = t('hideFolder', folder);
         item.title = folder;
         item.addEventListener('click', () => blacklist('folder', folder));
         hideFolders.append(item);
       }
     } catch {
-      caption.textContent = 'no se ha podido leer esta foto';
+      caption.textContent = t('unreadable');
     }
   }
 
@@ -533,7 +748,7 @@
         body: JSON.stringify({ id, scope, folder }),
       });
       const data = await res.json();
-      if (!res.ok) { say(data.error || 'could not hide that'); return; }
+      if (!res.ok) { say(data.error || t('hideFailed')); return; }
 
       // Drop the hidden photos from the playlist in place, so the shuffle keeps its
       // position instead of restarting from a fresh one.
@@ -547,7 +762,7 @@
       history.splice(0, history.length, ...history.filter(keep));
 
       const count = data.removed.length;
-      say(`Oculta ${data.entry} · ${count} foto${count === 1 ? '' : 's'}`,
+      say(t('hidden', data.entry, count),
         () => undoBlacklist(data.entry, scope));
       // Move on only if what was hidden is what is on screen. Hiding a neighbour from the
       // gallery grid should leave the frame where it is.
@@ -586,7 +801,7 @@
           histPos += 1;
         }
       }
-      say(`Restaurada ${entry}`);
+      say(t('restored', entry));
     } catch {
       say('no se ha podido contactar con el servidor');
     }
@@ -620,10 +835,10 @@
       // Nothing can leave F11 from script — it is a browser mode with no web API. Taking
       // it over with requestFullscreen would only desync the icon again, so say so instead
       // of pretending the click did something.
-      say('Pulsa F11 para salir de pantalla completa');
+      say(t('exitFullscreen'));
     } else {
       // Must be called straight from the click, or the browser refuses the request.
-      document.documentElement.requestFullscreen().catch(() => say('pantalla completa denegada'));
+      document.documentElement.requestFullscreen().catch(() => say(t('fullscreenDenied')));
     }
   }
 
@@ -659,7 +874,7 @@
   function showHeart(on) {
     isFavorite = on;
     heart.setAttribute('aria-pressed', on ? 'true' : 'false');
-    heart.setAttribute('aria-label', on ? 'Quitar de favoritas' : 'Añadir a favoritas');
+    heart.setAttribute('aria-label', t(on ? 'ui.favoriteRemove' : 'ui.favoriteAdd'));
     heart.title = on ? 'Remove from favorites' : 'Add to favorites';
     // toggleAttribute, not .hidden: SVG elements have no such IDL property, so assigning
     // to it silently does nothing at all.
@@ -716,7 +931,7 @@
     event.stopPropagation();
     const path = pathLabel.dataset.fullPath || pathLabel.textContent;
     if (!path) return;
-    say(await copyText(path) ? 'Ruta copiada' : 'No se ha podido copiar la ruta');
+    say(t(await copyText(path) ? 'pathCopied' : 'pathNotCopied'));
   });
 
   async function setFavorite(id, wanted) {
@@ -736,7 +951,7 @@
       // on the next pass rather than right now.
       // The same heart the button and the swipe pill use, filled or outline to match
       // which way the toggle went.
-      say(wanted ? 'Añadida a favoritas' : 'Quitada de favoritas', null, heartIcon(wanted));
+      say(t(wanted ? 'favorited' : 'unfavorited'), null, heartIcon(wanted));
     } catch {
       say('no se ha podido contactar con el servidor');
       if (id === currentId) showHeart(!wanted);
@@ -806,14 +1021,14 @@
       galleryFolder.textContent = '';
       const empty = document.createElement('div');
       empty.id = 'gallery-empty';
-      empty.textContent = 'no se ha podido cargar la carpeta';
+      empty.textContent = t('folderFailed');
       galleryGrid.append(empty);
       return;
     }
     if (!galleryOpen) return;  // closed again while the request was in flight
 
     galleryFolder.textContent =
-      `${data.folder || 'raíz de la biblioteca'} · ${data.total} foto${data.total === 1 ? '' : 's'}`;
+      t('folderCount', data.folder || t('libraryRoot'), data.total);
 
     galleryPhotos = data.photos;
     galleryDir = data.folder;
@@ -1091,8 +1306,6 @@
     return `${Math.abs(lat).toFixed(5)}° ${ns}, ${Math.abs(lon).toFixed(5)}° ${ew}`;
   }
 
-  const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
-    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const TAKEN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/;
 
   /** "12 Oct 2025 · 13:45".
@@ -1106,7 +1319,7 @@
     const parts = TAKEN.exec(String(taken));
     if (!parts) return String(taken);
     const [, year, month, day, hours, minutes] = parts;
-    return `${+day} ${MONTHS[+month - 1]} ${year} · ${hours}:${minutes}`;
+    return `${+day} ${t('months')[+month - 1]} ${year} · ${hours}:${minutes}`;
   }
 
   /** Label above value, each pair a block in the grid. The dt/dd stay wrapped in a div so
@@ -1162,7 +1375,7 @@
       infoTitle.textContent = '';
       const empty = document.createElement('div');
       empty.id = 'info-empty';
-      empty.textContent = 'no se han podido leer los detalles';
+      empty.textContent = t('detailsFailed');
       infoRows.append(empty);
       return;
     }
@@ -1182,21 +1395,21 @@
 
     // 1 — when, and how much of it there is.
     const when = line();
-    if (info.taken) addRow('Fecha', takenText(info.taken), false, false, when, 'calendar');
+    if (info.taken) addRow(t('row.date'), takenText(info.taken), false, false, when, 'calendar');
     if (info.width && info.height) {
       const megapixels = (info.width * info.height / 1e6).toFixed(1);
       const shape = aspectText(info.width, info.height);
       const parts = [`${info.width} × ${info.height}`, shape, `${megapixels} MP`].filter(Boolean);
-      addRow('Tamaño', parts.join(' · '), false, false, when, 'ruler');
+      addRow(t('row.size'), parts.join(' · '), false, false, when, 'ruler');
     }
-    if (info.size) addRow('Peso', `${(info.size / 1048576).toFixed(1)} MB`, false, false, when, 'weight');
+    if (info.size) addRow(t('row.weight'), `${(info.size / 1048576).toFixed(1)} MB`, false, false, when, 'weight');
     commit(when);
 
     // 2 — what took it, and how it was set.
     const gear = line();
     const camera = cameraName(info.make, info.model);
-    if (camera) addRow('Cámara', camera, false, false, gear, 'camera');
-    if (info.lens) addRow('Objetivo', lensName(info.lens), false, false, gear, 'lens');
+    if (camera) addRow(t('row.camera'), camera, false, false, gear, 'camera');
+    if (info.lens) addRow(t('row.lens'), lensName(info.lens), false, false, gear, 'lens');
 
     // Focal length, aperture, shutter and ISO in one field: they are the settings of a
     // single shot and are read together, the way any camera displays them. Whichever
@@ -1213,8 +1426,8 @@
     // Compensation last, and only when it is not zero: it is a correction to the exposure
     // above rather than a separate fact, and on most shots there is none to report.
     if (info.compensation) shot.push(`${info.compensation > 0 ? '+' : ''}${info.compensation} EV`);
-    if (shot.length) addRow('Parámetros', shot.join(' · '), false, false, gear, 'aperture');
-    else if (info.exposure_display) addRow('Parámetros', info.exposure_display, false, false, gear, 'aperture');
+    if (shot.length) addRow(t('row.exposure'), shot.join(' · '), false, false, gear, 'aperture');
+    else if (info.exposure_display) addRow(t('row.exposure'), info.exposure_display, false, false, gear, 'aperture');
     commit(gear);
 
     // 3 — where. One field, not two: the place name is the map link when geocoding
@@ -1232,22 +1445,22 @@
         value.rel = 'noopener noreferrer';
         value.textContent = label;
       }
-      addRow('Ubicación', value, !info.location, false, where, 'pin');
+      addRow(t('row.place'), value, !info.location, false, where, 'pin');
       if (located && info.altitude) {
-        addRow('Altitud', `${Math.round(info.altitude)} m`, false, false, where, 'altitude');
+        addRow(t('row.altitude'), `${Math.round(info.altitude)} m`, false, false, where, 'altitude');
       }
       commit(where);
     }
 
     // 4 — who is in it, and the way out to the original.
     const who = line();
-    if (info.people && info.people.length) addRow('Personas', info.people.join(', '), false, false, who, 'user');
-    if (info.tags && info.tags.length) addRow('Etiquetas', info.tags.join(', '), false, false, who, 'tag');
+    if (info.people && info.people.length) addRow(t('row.people'), info.people.join(', '), false, false, who, 'user');
+    if (info.tags && info.tags.length) addRow(t('row.tags'), info.tags.join(', '), false, false, who, 'tag');
     commit(who);
 
     // 5 — where it lives on disk.
     const path = line();
-    addRow('Ruta', info.fullPath || '', true, false, path, 'folder');
+    addRow(t('row.path'), info.fullPath || '', true, false, path, 'folder');
     commit(path);
 
     // 6 — the way out to the original, last: it is an action, not another fact, and it
@@ -1267,7 +1480,7 @@
     if (!infoRows.children.length) {
       const empty = document.createElement('div');
       empty.id = 'info-empty';
-      empty.textContent = 'esta foto no tiene datos registrados';
+      empty.textContent = t('noDetails');
       infoRows.append(empty);
     }
   }
@@ -1288,6 +1501,12 @@
   document.getElementById('open-info').addEventListener('click', event => {
     event.stopPropagation();
     openInfo(menuId);
+  });
+  // Leaves the slideshow, which is the only way to reach the settings of *this* device:
+  // half of them live in its own browser. The page links back.
+  document.getElementById('open-settings').addEventListener('click', event => {
+    event.stopPropagation();
+    location.href = '/settings';
   });
   // Tapping the dimmed area around the card closes it.
   //
@@ -1453,7 +1672,7 @@
   function describeFavoriteEdge() {
     const removing = swipePhoto ? swipePhotoFavorite : isFavorite;
     edges.up.classList.toggle('removing', removing);
-    edgeFavoriteLabel.textContent = removing ? 'Quitar' : 'Favorita';
+    edgeFavoriteLabel.textContent = t(removing ? 'edge.unfavorite' : 'ui.favorite');
     edgeHeartOn.toggleAttribute('hidden', removing);   // filled promises a favorite
     edgeHeartOff.toggleAttribute('hidden', !removing); // outline promises its removal
   }
@@ -1640,6 +1859,13 @@
       else if (assetStamp !== stamp) location.reload();
     } catch { /* server restarting, most likely; try again next tick */ }
   }, 5000);
+
+  // The quiet hours themselves change rarely; whether they are in force changes every
+  // day, so the clock is checked far more often than the setting is re-read.
+  applyLanguage();
+  readSettings();
+  setInterval(readSettings, 60000);
+  setInterval(paintNight, 20000);
 
   // A long-lived tab still accumulates; six hours is a cheap reset. It was two while
   // the frame held full-resolution bitmaps, which is no longer the case.

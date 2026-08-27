@@ -15,6 +15,10 @@ LEVELS = {"off": None, "error": logging.WARNING, "info": logging.INFO}
 
 ROOT = "photoframe"   # every module logs through a child of this, so one handler covers all
 
+# Where start() was pointed. Module-level because logging itself is: with the level at
+# "off" there are no handlers left to ask where the file was.
+_started: tuple = ()
+
 
 def level_from(config_file: Path, env_value: str | None) -> int | None:
     """Straight from the file: Settings is not built yet, and parsing it is worth logging."""
@@ -44,9 +48,22 @@ def tail(lines: int = 200) -> list[str]:
     return []
 
 
+def set_level(name: str) -> None:
+    """Change the level of a running frame, from the settings page.
+
+    Rebuilt rather than adjusted: "off" leaves no file handler to raise the level of.
+    """
+    if not _started:
+        return
+    log_file, extra = _started
+    start(log_file, LEVELS.get(str(name).lower(), logging.WARNING), extra)
+
+
 def start(log_file: Path, level: int | None, extra_loggers=()) -> None:
     """Log to a file. Under pythonw.exe there is no stderr at all, so without this every
     warning and traceback the server produces goes nowhere."""
+    global _started
+    _started = (log_file, tuple(extra_loggers))
     for logger in (logging.getLogger(ROOT), *extra_loggers):
         # Loggers are global and outlive a re-import, so without this a second import
         # stacks a second handler and every line is written twice, then three times.

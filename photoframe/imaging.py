@@ -142,6 +142,35 @@ class RenderCache:
             }
 
 
+class Traffic:
+    """How photos leave the server: re-encoded, or handed over as they sit.
+
+    Only a device that asks for a size costs a decode; a phone or a PC gets the file
+    itself. Counted because the render figures otherwise read as the whole of the traffic.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._sent = {"rendered": [0, 0], "original": [0, 0]}   # requests, bytes
+
+    def sent(self, kind: str, size) -> None:
+        with self._lock:
+            counted = self._sent[kind]
+            counted[0] += 1
+            counted[1] += max(0, int(size or 0))
+
+    def stats(self) -> dict:
+        with self._lock:
+            sent = {kind: list(counted) for kind, counted in self._sent.items()}
+        total = sum(counted[0] for counted in sent.values())
+        report = {
+            kind: {"requests": counted[0], "mb": round(counted[1] / 1048576, 1)}
+            for kind, counted in sent.items()
+        }
+        report["originalShare"] = f"{sent['original'][0] / total:.0%}" if total else "n/a"
+        return report
+
+
 class Renderer:
     """Scales and crops to exactly the size asked for.
 

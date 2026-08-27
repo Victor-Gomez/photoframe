@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="{{ lang }}">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('settings.title') }}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+
+<body>
+  <main>
+    <header>
+      <h1>{{ t('settings.heading') }}</h1>
+      <nav><a href="/">{{ t('nav.frame') }}</a> <a href="/status">{{ t('nav.status') }}</a></nav>
+    </header>
+
+    <h2>{{ t('h.global') }}</h2>
+    <p class="note">{{ t('global.note') }}</p>
+    {% if not db.open %}<p class="note bad">{{ t('db.busy') }}</p>{% endif %}
+    <fieldset>
+      <div class="field">
+        <label for="slideSeconds">{{ t('row.slideSeconds') }}</label>
+        <div class="controls">
+          <input type="number" id="slideSeconds" min="3" max="3600" value="{{ settings.slideSeconds }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="favoriteWeight">{{ t('row.favoriteWeight') }}
+          <small>{{ t('hint.favoriteWeight') }}</small></label>
+        <div class="controls">
+          <input type="number" id="favoriteWeight" min="1" max="100" value="{{ settings.favoriteWeight }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>{{ t('row.quiet') }}
+          <small>{{ t('hint.quiet') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="quietOn" {{ "checked" if settings.quietFrom and settings.quietTo }}>
+            {{ t('quiet.from') }}
+          </label>
+          <input type="time" id="quietFrom" value="{{ settings.quietFrom or '23:00' }}">
+          <span>{{ t('quiet.to') }}</span>
+          <input type="time" id="quietTo" value="{{ settings.quietTo or '07:00' }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="language">{{ t('row.language') }}</label>
+        <div class="controls">
+          <select id="language">
+            {% for code, name in languages.items() %}
+            <option value="{{ code }}" {{ "selected" if settings.language == code }}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="logLevel">{{ t('row.logLevel') }}
+          <small>{{ t('hint.logLevel') }}</small></label>
+        <div class="controls">
+          <select id="logLevel">
+            {% for level in logLevels %}
+            <option value="{{ level }}" {{ "selected" if settings.logLevel == level }}>{{ t('log.' + level) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <h2>{{ t('h.device') }}</h2>
+    <p class="note">{{ t('device.note') }}</p>
+    <fieldset>
+      <div class="field">
+        <label for="imageMode">{{ t('row.images') }}
+          <small id="deviceNote"></small></label>
+        <div class="controls">
+          <select id="imageMode">
+            <option value="auto">{{ t('images.auto') }}</option>
+            <option value="1">{{ t('images.originals') }}</option>
+            <option value="0">{{ t('images.reencoded') }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="deviceLanguage">{{ t('row.deviceLanguage') }}</label>
+        <div class="controls">
+          <select id="deviceLanguage">
+            <option value="">{{ t('language.asFrame') }}</option>
+            {% for code, name in languages.items() %}
+            <option value="{{ code }}" {{ "selected" if deviceLanguage == code }}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </fieldset>
+  </main>
+
+  <div id="toast" hidden></div>
+
+  <script>
+    const TEXT = {{ js_text | tojson }};
+    const $ = id => document.getElementById(id);
+
+    // Every control saves itself the moment it changes, so there is nothing to forget to
+    // press. The toast is the only acknowledgement, which is why a failure keeps it up
+    // longer and puts the field back to what is actually stored.
+    let toastTimer;
+    function toast(message, bad) {
+      const box = $('toast');
+      box.textContent = message;
+      box.className = bad ? 'bad' : 'good';
+      box.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { box.hidden = true; }, bad ? 6000 : 2500);
+    }
+
+    /* -- generales ---------------------------------------------------------- */
+
+    function paintQuiet() {
+      $('quietFrom').disabled = $('quietTo').disabled = !$('quietOn').checked;
+    }
+    paintQuiet();
+
+    async function save(patch) {
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || res.status);
+        // Echo what was stored rather than what was typed: the server clamps.
+        $('slideSeconds').value = body.slideSeconds;
+        $('favoriteWeight').value = body.favoriteWeight;
+        // The page is rendered by the server, so its own language changes on reload — and
+        // the page coming back in the new language is the acknowledgement.
+        if ('language' in patch && body.language !== TEXT.language && !TEXT.deviceLanguage) {
+          location.reload();
+          return;
+        }
+        toast(TEXT.saved);
+      } catch (err) {
+        toast(String(err.message || err), true);
+        location.reload();   // back to what is actually stored, whatever was typed
+      }
+    }
+
+    $('slideSeconds').addEventListener('change', () => save({ slideSeconds: +$('slideSeconds').value }));
+    $('favoriteWeight').addEventListener('change', () => save({ favoriteWeight: +$('favoriteWeight').value }));
+    $('language').addEventListener('change', () => save({ language: $('language').value }));
+    $('logLevel').addEventListener('change', () => save({ logLevel: $('logLevel').value }));
+
+    // Both ends together: half a window is not a window, and the server says so.
+    function saveQuiet() {
+      const on = $('quietOn').checked;
+      save({ quietFrom: on ? $('quietFrom').value : '', quietTo: on ? $('quietTo').value : '' });
+    }
+    $('quietOn').addEventListener('change', () => { paintQuiet(); saveQuiet(); });
+    $('quietFrom').addEventListener('change', saveQuiet);
+    $('quietTo').addEventListener('change', saveQuiet);
+
+    /* -- este dispositivo --------------------------------------------------- */
+
+    // The same guess frame.js makes, so the note says what "automatic" means here.
+    const cores = navigator.hardwareConcurrency || 0;
+    const memory = navigator.deviceMemory || 0;
+    const choice = (cores >= 6 || memory >= 6) ? TEXT.originals : TEXT.reencoded;
+    $('deviceNote').textContent = TEXT.guess
+      .replace('{choice}', choice).replace('{cores}', cores || '?').replace('{memory}', memory || '?');
+
+    let stored = null;
+    try { stored = localStorage.getItem('frameFull'); } catch { /* storage disabled */ }
+    $('imageMode').value = stored === null ? 'auto' : stored;
+
+    $('imageMode').addEventListener('change', () => {
+      const wanted = $('imageMode').value;
+      try {
+        if (wanted === 'auto') localStorage.removeItem('frameFull');
+        else localStorage.setItem('frameFull', wanted);
+        toast(TEXT.saved);
+      } catch {
+        toast(TEXT.noStorage, true);
+      }
+    });
+
+    // A cookie, not localStorage: /status and this page are rendered by the server, and
+    // only a cookie reaches it in time to render them in this device's language.
+    $('deviceLanguage').addEventListener('change', () => {
+      const wanted = $('deviceLanguage').value;
+      document.cookie = wanted
+        ? `frame_lang=${wanted}; path=/; max-age=31536000; samesite=lax`
+        : 'frame_lang=; path=/; max-age=0; samesite=lax';
+      location.reload();   // the page comes back in the language it now speaks
+    });
+  </script>
+</body>
+
+</html>

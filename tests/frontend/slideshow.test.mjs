@@ -137,3 +137,84 @@ test('the info panel formats what the camera recorded', async () => {
     assert.equal(fields['Parámetros'], 'f/7.1 · 1/125s · ISO 800 · 29 mm · -1 EV');
   } finally { frame.close(); }
 });
+
+/* ---- quiet hours ---------------------------------------------------------- */
+
+const clock = (minutesFromNow) => {
+  const when = new Date(Date.now() + minutesFromNow * 60000);
+  return `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+};
+
+test('the frame goes dark and stops advancing inside the quiet hours', async () => {
+  // Not decoration: a wall in a dark bedroom asked the server for a full render every
+  // slideSeconds all night, for pixels nobody could see.
+  const frame = await boot({ slideSeconds: 0.2, quiet: { from: clock(-60), to: clock(60) } });
+  try {
+    const first = frame.shown();
+    assert.ok(first, 'the photo already prepared still shows: quiet hours gate advancing, not the reveal');
+
+    // Past the crossfade, which `prepare` waits out before it even asks for the next
+    // photo: anything shorter measures the fade rather than the hold.
+    await frame.tick(SETTLE);
+    assert.equal(frame.shown(), first, 'nothing should advance while the frame is asleep');
+    assert.ok(frame.window.document.body.classList.contains('asleep'));
+  } finally { frame.close(); }
+});
+
+test('a key at three in the morning wakes it', async () => {
+  const frame = await boot({ slideSeconds: 0.2, quiet: { from: clock(-60), to: clock(60) } });
+  try {
+    const first = frame.shown();
+    await frame.tick(600);
+
+    frame.key('ArrowRight');
+    assert.notEqual(await frame.waitForChange(first), first, 'a tap should be answered, not ignored');
+    assert.ok(!frame.window.document.body.classList.contains('asleep'));
+  } finally { frame.close(); }
+});
+
+// A control, not a guard: it states that the feature is inert outside its window, and
+// it passes with and without the quiet hours implemented at all.
+test('quiet hours outside the window change nothing', async () => {
+  const frame = await boot({ slideSeconds: 0.2, quiet: { from: clock(60), to: clock(120) } });
+  try {
+    const first = frame.shown();
+    assert.notEqual(await frame.waitForChange(first), first, 'the slideshow should carry on');
+    assert.ok(!frame.window.document.body.classList.contains('asleep'));
+  } finally { frame.close(); }
+});
+
+/* ---- language ------------------------------------------------------------- */
+
+test('the frame changes language from the setting, without a reload', async () => {
+  const frame = await boot({ language: 'en' });
+  try {
+    const { document } = frame.window;
+    assert.equal(document.documentElement.lang, 'en');
+    assert.equal(document.getElementById('hide-photo').textContent, 'Hide this photo');
+    assert.equal(document.getElementById('open-settings').textContent, 'Settings');
+    // Attributes too, not only text: the buttons are icons and say nothing else.
+    assert.equal(document.getElementById('more').getAttribute('aria-label'), 'More options');
+    // And inside a template, whose tiles are cloned long after the language was applied.
+    assert.equal(
+      document.getElementById('gallery-tile').content.querySelector('.tile-hide')
+        .getAttribute('aria-label'), 'Hide');
+  } finally { frame.close(); }
+});
+
+test('an unknown language leaves the frame in Spanish', async () => {
+  const frame = await boot({ language: 'de' });
+  try {
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Ocultar esta foto');
+  } finally { frame.close(); }
+});
+
+test('a device that asked for its own language keeps it', async () => {
+  // The frame is set to Spanish and says so on every poll; this screen was told English.
+  const frame = await boot({ language: 'es', deviceLanguage: 'en' });
+  try {
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Hide this photo');
+    await frame.tick(300);   // long enough for the settings poll to have answered
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Hide this photo');
+  } finally { frame.close(); }
+});

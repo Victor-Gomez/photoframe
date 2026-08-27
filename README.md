@@ -17,11 +17,13 @@ on the fly and keeps nothing on disk.
 | `photoframe/settings.py` | config.json, with every scalar overridable by environment variable |
 | `photoframe/database.py` | the connection to `photos.db`, and lending the file out to a tool |
 | `photoframe/rules.py` | the blacklist and the favourites, and the matching they drive |
+| `photoframe/preferences.py` | the settings someone sets from a screen, kept in `photos.db` too |
+| `photoframe/i18n.py` | what the server says, in both languages |
 | `photoframe/library.py` | which photos exist, their shape, their tags, and the shuffled passes |
 | `photoframe/imaging.py` | reading headers, rendering to screen size, the in-memory cache |
 | `photoframe/frame.py` | wires the above together — the only module that knows the whole graph |
 | `photoframe/web/` | the HTTP surface, one blueprint per group of endpoints |
-| `web/` | the page — `frame.html`, `frame.css`, `frame.js`, and `status.html`, re-read from disk on every request |
+| `web/` | the page — `frame.html`, `frame.css`, `frame.js` — and the two pages that are not the frame, `status.html` and `settings.html`, over `admin.css`. All re-read from disk on every request |
 | `config.json` | settings only — ports, timings, paths |
 | `tests/` | the suite. `python -m pytest` |
 
@@ -75,9 +77,9 @@ blacklist — belongs to the library rather than to this program. `LIBRARY_TOOLS
 | `dbFile` | `photos.db`, in the library's metadata folder. The photo list, ratios, tags, blacklist and favourites. |
 | `LIBRARY_TOOLS` | Environment only. Where `store.py` lives. Both this and `DB_FILE` must be set when deploying somewhere the library sits elsewhere. |
 | `frameToken` | If set, every request needs `?k=<token>` once; then it rides on a cookie. |
-| `logLevel` | `error` (the default) writes failures only, which on a healthy frame means an empty file. `info` adds the running commentary — reach for it when diagnosing. `off` writes nothing at all, including tracebacks. |
-| `slideSeconds` | Seconds per photo. |
-| `favoriteWeight` | How many times more often a favourite comes round. `1` disables it. |
+| `logLevel` | The level the frame starts at, before `photos.db` is read. `error` (the default) writes failures only, which on a healthy frame means an empty file. `info` adds the running commentary; `off` writes nothing at all, tracebacks included. `/settings` changes it live. |
+| `slideSeconds` | Seconds per photo. The starting point: `/settings` overrides it in `photos.db`. |
+| `favoriteWeight` | How many times more often a favourite comes round. `1` disables it. Also overridable from `/settings`. |
 | `jpegQuality` | Quality of the JPEG sent to the frame. |
 | `encodeThreads` | How many photos may be rendered at once. Each holds a decoded photo, so it stays well below the request thread pool. |
 | `avifdec` | Path to libavif's `avifdec`. Its dav1d decoder is multithreaded, which Pillow's is not — measured 849ms vs 1160ms at the median on this library. Falls back to Pillow if it fails. |
@@ -117,6 +119,58 @@ either slash. A bare name with no slash (`Screenshots`) matches at any depth.
   records the exception; favouriting it again removes it. Nothing is left behind either way.
 
 The ⋮ menu on the frame writes these for you.
+
+### Settings someone sets, and settings the machine has
+
+`config.json` is what this *box* is: ports, paths, threads, where `avifdec` lives. It is
+edited by hand and the frame never writes to it, so a hand-edited setting cannot be lost to
+a tap on a screen.
+
+Everything a person actually chooses lives in `photos.db` instead, in the `meta` table
+under `frame.*`, beside the rules — it belongs to the library rather than to the machine
+serving it, and follows the library between them. `/settings` writes it, and answers **503**
+while the database is on loan rather than reporting a success it did not record. There is
+no Save button: every control writes itself the moment it changes, and the toast is the
+only acknowledgement — so there is nothing to fill in and forget to press. Unset
+means "whatever `config.json` says", so a deployment keeps its own starting point without
+anything having to be written first.
+
+| Setting | |
+| --- | --- |
+| `slideSeconds` | Seconds per photo. |
+| `favoriteWeight` | How many times more often a favourite comes round. |
+| `quietFrom`, `quietTo` | The quiet hours. Empty means never. |
+| `language` | `es` or `en`. Everything a person reads follows it, unless a device says otherwise. |
+| `logLevel` | `off`, `error` or `info` — and it takes effect at once, without a restart. |
+
+**Quiet hours: the wall goes dark and the frame stops.** Between the two times the page
+fades to black over three seconds and stops advancing — the same hold a hidden tab takes,
+so it does not gate the reveal. It is not only about light: a frame in a dark room was
+asking the server for a full render every `slideSeconds` all night, for pixels nobody could
+see. A tap, click or key wakes it for five minutes. The window usually wraps past midnight,
+and is meant to: `23:00`–`07:00` is two ranges, not one. The page re-reads the setting once
+a minute, so changing it reaches the wall without anyone walking over.
+
+**Two languages, and two catalogues.** Spanish and English, chosen from `/settings`.
+`photoframe/i18n.py` holds what the *server* writes — the two admin pages and what an
+endpoint refuses with, translated where it reaches a person rather than where it is raised.
+The frame page carries its own copy in `web/frame.js`, because it changes language from the
+settings poll without reloading, and has to be able to say "reconnecting" when the server
+is precisely what it cannot reach.
+
+**A device may speak something else.** The frame's own language is the default; any one
+screen can override it for itself from *Este dispositivo*, and that choice wins wherever it
+was made — the frame, both admin pages, and the errors an endpoint answers with. It is kept
+in a cookie rather than in `localStorage`, unlike the other per-device setting: `/status`
+and `/settings` are rendered by the server, and only a cookie reaches it in time to render
+them right rather than after a flash of the wrong language. "Como el marco" clears it. The two overlap barely: one is a status table, the other
+is a slideshow. A key missing from one language falls back to Spanish and then to the key
+itself, so a half-translated string shows as its name rather than as nothing.
+
+The third kind is neither: **which device wants originals** is a property of the screen in
+front of you, so it lives in that browser's own storage and never reaches the server.
+`/settings` has it under *Este dispositivo*, which is also the only place it was ever
+visible — before, it was `?full=1` and a guess from `hardwareConcurrency`.
 
 ## How the frame works
 
@@ -194,8 +248,9 @@ favouriting answers **503** rather than reporting a success it did not record. I
 released it dies, the frame takes the database back on its own after 15 minutes.
 
 **`/status` is the frame's own health page.** Uptime, how many photos and of which shape,
-whether the database is held or on loan, the two decoders' medians, the render cache's hit
-rate, the rules in force, the live settings and the tail of the log — everything the JSON
+whether the database is held or on loan, how much goes out re-encoded against how much is
+handed over untouched, the two decoders' medians, the render cache's hit rate, the rules in
+force, the settings of both kinds and the tail of the log — everything the JSON
 endpoints report, on one page. The frame runs headless on a machine across the house, and
 "is it still up, and did anything go wrong?" used to mean an ssh session.
 

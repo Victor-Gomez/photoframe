@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 
 from flask import Blueprint, abort, jsonify, request
 
+from ..i18n import COOKIE, chosen, translator
 from ..imaging import EXTENSIONS
 from ..library import ancestors, photo_id_of
 from ..rules import normalise_entry
@@ -19,6 +20,10 @@ log = logging.getLogger(__name__)
 def blueprint(frame):
     bp = Blueprint("curation", __name__)
     library, rules = frame.library, frame.rules
+    # Per request, not per blueprint: the language is a setting, and the device asking
+    # may have overridden it.
+    def text():
+        return translator(chosen(request.cookies.get(COOKIE), frame.prefs.language))
 
     def indexed_photo(data: dict):
         src = library.path_of(data.get("id", ""))
@@ -40,12 +45,12 @@ def blueprint(frame):
             wanted = normalise_entry(data.get("folder", "")).lower()
             entry = next((a for a in ancestors(rel) if a.lower() == wanted), None)
             if entry is None:
-                return jsonify(error="that folder does not contain this photo"), 400
+                return jsonify(error=text()("error.folderMismatch")), 400
             section = "folders"
         elif scope == "photo":
             entry, section = rel.as_posix(), "files"
         else:
-            return jsonify(error="scope must be 'photo' or 'folder'"), 400
+            return jsonify(error=text()("error.scope")), 400
 
         rules.add(section, entry)
         removed = library.drop_blacklisted()
@@ -64,7 +69,7 @@ def blueprint(frame):
         entry = normalise_entry(data.get("entry", ""))
         scope = data.get("scope", "photo")
         if not entry or scope not in ("photo", "folder"):
-            return jsonify(error="nothing to undo"), 400
+            return jsonify(error=text()("error.nothingToUndo")), 400
 
         log.info("blacklist undo requested %r (%s) by %s", entry, scope, request.remote_addr)
         rules.remove("files" if scope == "photo" else "folders", entry)
@@ -75,9 +80,9 @@ def blueprint(frame):
 
         path = library.root / entry
         if not path.is_file() or path.suffix.lower() not in EXTENSIONS:
-            return jsonify(error="that photo is no longer there"), 404
+            return jsonify(error=text()("error.photoGone")), 404
         if rules.blacklisted_file(entry):
-            return jsonify(error="another entry still hides it"), 409
+            return jsonify(error=text()("error.stillHidden")), 409
 
         pid = library.restore(entry, path)
         log.info("blacklist UNDO %r (%s) by %s", entry, scope, request.remote_addr)

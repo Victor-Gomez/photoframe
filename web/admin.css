@@ -1,0 +1,195 @@
+/* The two pages that are not the frame: /status and /settings. Deliberately plain — they
+   are read on a phone while standing in front of the thing that is misbehaving. */
+
+:root {
+  color-scheme: dark;
+  --ink: #e8e8ea;
+  --dim: #8b8b93;
+  --line: #2a2a2f;
+  --panel: #17171a;
+  --good: #7bd88f;
+  --warn: #e8c46a;
+  --bad: #e88b8b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 1.4rem 1.1rem 4rem;
+  background: #0d0d0f;
+  color: var(--ink);
+  font: 15px/1.5 system-ui, sans-serif;
+}
+
+main { max-width: 56rem; margin: 0 auto; }
+
+h1 { font-size: 1.25rem; margin: 0; }
+
+h2 {
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--dim);
+  margin: 2.2rem 0 .6rem;
+  font-weight: 600;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+nav { display: flex; gap: 1rem; }
+
+a { color: #8ab4ff; }
+
+p.note { color: var(--dim); margin: .2rem 0 1rem; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: .7rem;
+  margin-top: 1.1rem;
+}
+
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .7rem .85rem;
+}
+
+.tile b { display: block; font-size: 1.35rem; font-weight: 600; }
+
+.tile span { color: var(--dim); font-size: .8rem; }
+
+table { width: 100%; border-collapse: collapse; }
+
+td {
+  padding: .34rem .6rem .34rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  word-break: break-word;
+}
+
+td:first-child { color: var(--dim); width: 13rem; }
+
+.good { color: var(--good); }
+
+.warn { color: var(--warn); }
+
+.bad { color: var(--bad); }
+
+details { border-bottom: 1px solid var(--line); padding: .34rem 0; }
+
+summary { cursor: pointer; color: var(--dim); }
+
+details ul { margin: .5rem 0 .3rem; padding-left: 1.2rem; }
+
+details li { font-family: ui-monospace, monospace; font-size: .82rem; }
+
+pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .8rem;
+  margin: 0;
+  max-height: 26rem;
+  overflow: auto;
+  font-size: .78rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.empty { color: var(--dim); }
+
+/* -- forms ---------------------------------------------------------------- */
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  background: var(--panel);
+  padding: .3rem 1rem 1rem;
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.field:last-of-type { border-bottom: 0; }
+
+.field label { font-weight: 500; }
+
+.field small { display: block; color: var(--dim); font-weight: 400; }
+
+.controls { display: flex; align-items: center; gap: .5rem; }
+
+input[type="time"],
+input[type="number"],
+select {
+  background: #0d0d0f;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  padding: .45rem .55rem;
+  font: inherit;
+  min-width: 6.5rem;
+}
+
+input:disabled { opacity: .4; }
+
+button {
+  background: #23232a;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  padding: .5rem .9rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary { background: #2f4f8f; border-color: #3c63b0; }
+
+button:disabled { opacity: .5; cursor: default; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin-top: 1rem;
+}
+
+.said { color: var(--dim); }
+
+label.switch { display: flex; align-items: center; gap: .5rem; font-weight: 400; }
+
+/* -- toast ---------------------------------------------------------------- */
+
+/* The only acknowledgement there is: every control saves itself as it changes. */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.6rem;
+  transform: translateX(-50%);
+  max-width: min(32rem, 90vw);
+  background: #23232a;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  padding: .6rem 1rem;
+  box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .5);
+}
+
+#toast[hidden] { display: none; }
+
+#toast.bad { border-color: var(--bad); color: var(--bad); }

@@ -34,7 +34,7 @@ def weighted_shuffle(ids: list[str], favorites: set[str], weight: int) -> list[s
 
 def blueprint(frame):
     bp = Blueprint("playlist", __name__)
-    library, rules, settings = frame.library, frame.rules, frame.settings
+    library, rules, prefs = frame.library, frame.rules, frame.prefs
 
     def page_of(token, ids, offset, limit, **extra):
         chunk = ids[offset:offset + limit] if limit else ids[offset:]
@@ -44,8 +44,8 @@ def blueprint(frame):
             offset=offset,
             count=len(chunk),
             ids=chunk,
-            favoriteWeight=settings.favorite_weight,
-            slideSeconds=settings.slide_seconds,
+            favoriteWeight=prefs.favorite_weight,
+            slideSeconds=prefs.slide_seconds,
             indexing=not library.probe_done.is_set(),
             **extra,
         )
@@ -103,7 +103,7 @@ def blueprint(frame):
         favorite = rules.favorite_check()   # one snapshot for the whole pass
         relatives = library.rel_lower_map()
         favorites = {pid for pid in ids if favorite(relatives.get(pid, ""), pid)}
-        ids = weighted_shuffle(ids, favorites, settings.favorite_weight)
+        ids = weighted_shuffle(ids, favorites, prefs.favorite_weight)
 
         token = secrets.token_urlsafe(9)
         library.passes.add(token, ids)

@@ -11,7 +11,8 @@ from flask import Flask, abort, jsonify, request
 
 from ..database import DatabaseUnavailable
 from ..frame import Frame
-from . import admin, curation, pages, photos, playlist
+from ..i18n import COOKIE, chosen, translator
+from . import admin, curation, pages, photos, playlist, preferences
 
 WEB_DIR = Path(__file__).resolve().parent.parent.parent / "web"
 
@@ -55,9 +56,9 @@ def create_app(frame: Frame) -> Flask:
         503 rather than a silent success: what you starred while the database was on loan,
         you know was not recorded.
         """
-        return jsonify(
-            error="la base de datos está en mantenimiento; inténtalo en un momento"), 503
+        language = chosen(request.cookies.get(COOKIE), frame.prefs.language)
+        return jsonify(error=translator(language)("error.dbBusy")), 503
 
-    for module in (pages, playlist, photos, curation, admin):
+    for module in (pages, playlist, photos, curation, preferences, admin):
         app.register_blueprint(module.blueprint(frame))
     return app

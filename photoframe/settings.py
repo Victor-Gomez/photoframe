@@ -18,6 +18,7 @@ DEFAULTS = {
     "port": 8080,
     "frameToken": "",
     "logLevel": "error",
+    "language": "es",
     "slideSeconds": 60,
     "probeWorkers": 4,
     "favoriteWeight": 10,
@@ -52,6 +53,9 @@ class Settings:
         self.host = self("host", "HOST")
         self.port = self("port", "PORT", int)
         self.slide_seconds = self("slideSeconds", "SLIDE_SECONDS", int)
+        # Only the starting points: /settings overrides both in photos.db.
+        self.language = self("language", "LANGUAGE")
+        self.log_level = self("logLevel", "LOG_LEVEL")
         self.probe_workers = self("probeWorkers", "PROBE_WORKERS", int)
         self.favorite_weight = max(1, self("favoriteWeight", "FAVORITE_WEIGHT", int))
         self.jpeg_quality = min(95, max(40, self("jpegQuality", "JPEG_QUALITY", int)))

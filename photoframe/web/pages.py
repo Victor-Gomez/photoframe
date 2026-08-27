@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
+from ..i18n import COOKIE, chosen
 from ..imaging import MAX_RENDER_EDGE, SOURCE_MIME
 
 log = logging.getLogger(__name__)
@@ -28,7 +29,11 @@ def blueprint(frame):
 
     @bp.get("/")
     def index():
-        return render_template("frame.html", assets=asset_versions())
+        # The language is in the markup so the first paint is already right; frame.js keeps
+        # its own catalogue and re-does the page when the setting changes.
+        return render_template(
+            "frame.html", assets=asset_versions(),
+            lang=chosen(request.cookies.get(COOKIE), frame.prefs.language))
 
     @bp.get("/api/assets")
     def asset_list():
@@ -58,6 +63,7 @@ def blueprint(frame):
 
         width, height = request.args.get("w", type=int), request.args.get("h", type=int)
         if not width or not height:
+            frame.traffic.sent("original", source.stat().st_size)
             # Explicit mimetype: the Windows mime registry has no .webp/.avif entry.
             return send_file(
                 source,
@@ -74,6 +80,7 @@ def blueprint(frame):
             log.exception("could not render %s", source)
             abort(415)
 
+        frame.traffic.sent("rendered", len(data))
         response = send_file(io.BytesIO(data), mimetype="image/jpeg")
         # Worth caching in the browser — stepping back through the history reuses it — but
         # it is never written to disk here.

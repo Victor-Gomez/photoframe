@@ -2,10 +2,11 @@
 
 import logging
 import time
+from datetime import datetime
 
 from flask import Blueprint, jsonify, render_template, request
 
-from .. import logs
+from .. import i18n, logs, preferences
 
 log = logging.getLogger(__name__)
 
@@ -28,16 +29,29 @@ def uptime(started: float) -> str:
 def blueprint(frame):
     bp = Blueprint("admin", __name__)
     library, rules, db, settings = frame.library, frame.rules, frame.db, frame.settings
+    prefs = frame.prefs
 
     @bp.post("/api/rescan")
     def rescan_now():
         """Pick up whatever scan.py has recorded since: a reload, not a walk."""
         return jsonify(count=library.refresh())
 
+    def verdict(renders: dict, t) -> str:
+        """Which decoder won, said in words. The JSON endpoint keeps the English original."""
+        pillow, avifdec = renders["pillow"], renders["avifdec"]
+        if min(pillow.get("renders", 0), avifdec.get("renders", 0)) < 20:
+            return t("verdict.waiting")
+        median, other = pillow["medianMs"], avifdec["medianMs"]
+        percent = round(abs(median - other) / max(median, 1) * 100)
+        return t("verdict.slower" if other > median else "verdict.faster", percent=percent)
+
     def report() -> dict:
         settings.reload()
         shown = dict(settings.values)
         shown["frameToken"] = "(set)" if settings.token else ""
+        language = i18n.chosen(request.cookies.get(i18n.COOKIE), prefs.language)
+        t = i18n.translator(language)
+        renders = frame.renderer.stats()
         return {
             "uptime": uptime(frame.started),
             "photos": len(library),
@@ -45,7 +59,14 @@ def blueprint(frame):
             "indexing": not library.probe_done.is_set(),
             "root": str(settings.photo_dir),
             "db": db.state(),
-            "renders": frame.renderer.stats(),
+            "t": t,
+            "lang": language,
+            "languages": i18n.NAMES,
+            "verdict": verdict(renders, t),
+            "prefs": prefs.as_dict(),
+            "quiet": preferences.is_quiet(*prefs.quiet_hours, datetime.now()),
+            "renders": renders,
+            "traffic": frame.traffic.stats(),
             "rules": rules.as_dict(),
             "settings": shown,
             "log": logs.tail(LOG_LINES),
@@ -72,7 +93,8 @@ def blueprint(frame):
 
     @bp.get("/api/render-stats")
     def render_stats():
-        return jsonify(frame.renderer.stats())
+        """The decoders, and what never reached them: originals go out untouched."""
+        return jsonify(**frame.renderer.stats(), traffic=frame.traffic.stats())
 
     @bp.post("/api/db/release")
     def db_release():

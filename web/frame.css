@@ -888,6 +888,20 @@ body.gallery-open {
 
 /* ---- info: what the camera recorded --------------------------------------- */
 
+/* Quiet hours: the room is dark, so the wall is too. Above everything, including the
+   gallery and the info panel — a tap wakes the frame before it reaches either. */
+#night {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 3s ease;
+}
+
+body.asleep #night { opacity: 1; }
+
 /* Same treatment as the gallery, for the same reason: the photo stays as context but
    stops competing with the text laid over it. */
 #info {
