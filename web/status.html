@@ -11,10 +11,7 @@
 
 <body>
   <main>
-    <header>
-      <h1>{{ t('brand') }}</h1>
-      <nav><a href="/settings">{{ t('nav.settings') }}</a> <a href="/status">{{ t('nav.refresh') }}</a></nav>
-    </header>
+    {% include "admin-header.html" %}
 
     <div class="tiles">
       <div class="tile"><b>{{ uptime }}</b><span>{{ t('tile.uptime') }}</span></div>
@@ -52,7 +49,6 @@
         </td></tr>
       <tr><td>{{ t('row.language') }}</td><td>{{ languages[prefs.language] }}</td></tr>
       <tr><td>{{ t('row.logLevel') }}</td><td>{{ t('log.' + prefs.logLevel) }}</td></tr>
-      <tr><td></td><td><a href="/settings">{{ t('change') }}</a></td></tr>
     </table>
 
     <h2>{{ t('h.database') }}</h2>

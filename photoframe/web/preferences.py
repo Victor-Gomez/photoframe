@@ -24,6 +24,7 @@ def blueprint(frame):
         t = i18n.translator(language)
         return render_template(
             "settings.html",
+            tab="settings",
             t=t, lang=language, languages=i18n.NAMES, logLevels=LOG_LEVELS,
             settings=prefs.as_dict(), db=frame.db.state(),
             # Empty means this device has not asked for one and follows the frame.

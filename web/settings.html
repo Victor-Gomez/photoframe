@@ -11,10 +11,7 @@
 
 <body>
   <main>
-    <header>
-      <h1>{{ t('settings.heading') }}</h1>
-      <nav><a href="/">{{ t('nav.frame') }}</a> <a href="/status">{{ t('nav.status') }}</a></nav>
-    </header>
+    {% include "admin-header.html" %}
 
     <h2>{{ t('h.global') }}</h2>
     <p class="note">{{ t('global.note') }}</p>

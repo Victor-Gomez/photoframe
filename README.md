@@ -23,7 +23,7 @@ on the fly and keeps nothing on disk.
 | `photoframe/imaging.py` | reading headers, rendering to screen size, the in-memory cache |
 | `photoframe/frame.py` | wires the above together — the only module that knows the whole graph |
 | `photoframe/web/` | the HTTP surface, one blueprint per group of endpoints |
-| `web/` | the page — `frame.html`, `frame.css`, `frame.js` — and the two pages that are not the frame, `status.html` and `settings.html`, over `admin.css`. All re-read from disk on every request |
+| `web/` | the page — `frame.html`, `frame.css`, `frame.js` — and the one that is not the frame: `settings.html` and `status.html`, two tabs over a shared `admin-header.html` and `admin.css`. All re-read from disk on every request |
 | `config.json` | settings only — ports, timings, paths |
 | `tests/` | the suite. `python -m pytest` |
 
@@ -192,8 +192,12 @@ visible — before, it was `?full=1` and a guess from `hardwareConcurrency`.
 - **Startup reads `photos.db` and serves immediately** — no directory walk, no decoding.
   That matters more than it sounds: the walk used to run *before* the server bound its port,
   and on a morning when the filesystem was crawling it took over 25 minutes, during which
-  the device couldn't even fetch the stylesheet. If the database is missing or empty the
-  frame falls back to walking the library in the background, while already serving.
+  the device couldn't even fetch the stylesheet. If the database is empty the frame falls
+  back to walking the library in the background, while already serving — but only if it
+  could be *read*, because the blacklist lives in it too. A database that will not open at
+  all leaves the frame empty and saying so, rather than walking a library with nothing
+  hidden; the watchdog takes it back the moment it becomes readable, and the walk runs
+  then.
 - **The photo list is read once, at startup.** Nothing re-walks the library on a timer:
   `photos.db` is written by the library's own tools, not by the frame, so there is nothing
   to discover on a schedule. New photos arrive when `/api/db/resume` hands the database
@@ -247,6 +251,11 @@ already in memory. Only writes and the info panel need the file, and those say s
 favouriting answers **503** rather than reporting a success it did not record. If whatever
 released it dies, the frame takes the database back on its own after 15 minutes.
 
+**`/status` and `/settings` are two tabs of the same page**, with a chevron back to the
+photos and nothing else in the header. Each tab is its own URL, so the tab you are on is
+also the reload — which is what keeps the status honest rather than a snapshot from ten
+minutes ago.
+
 **`/status` is the frame's own health page.** Uptime, how many photos and of which shape,
 whether the database is held or on loan, how much goes out re-encoded against how much is
 handed over untouched, the two decoders' medians, the render cache's hit rate, the rules in
@@ -277,9 +286,12 @@ forever; every image request queued behind it until all eight server threads wer
 and the frame stopped serving anything at all, stylesheet included. `avifdecTimeout` turns
 that into a slow render instead of an outage.
 
-**The tools skip `zTools`, and the frame blacklists it.** Otherwise the face thumbnails
-inside the library get indexed as photos — the library briefly grew from 35,299 to 43,551
-"photos" that way.
+**The tools skip `zTools`, the frame blacklists it, and the walk refuses to enter it
+anyway.** Otherwise the face thumbnails inside the library get indexed as photos — the
+library briefly grew from 35,299 to 43,551 "photos" that way. The rule is the ordinary
+guard; the walk skips the folder on its own because the one time it walks is the one time
+the rules may not have loaded. It is found from where `dbFile` sits rather than by name, so
+a library laid out differently is covered too.
 
 **Photo ids are a hash of the relative path.** Move a photo and it becomes a different photo
 to the frame, and any rule naming it stops matching. `scan.py` stores a content hash so a

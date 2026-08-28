@@ -167,3 +167,14 @@ def test_a_cookie_naming_a_language_nobody_wrote_is_ignored(app, client):
     client.set_cookie("frame_lang", "fr", domain="localhost")
 
     assert "Fotos servidas" in client.get("/status").get_data(as_text=True)
+
+
+def test_the_two_admin_pages_are_one_page_with_two_tabs(app, client):
+    """Same header on both, the tab you are on marked, and the way back to the photos is a
+    chevron with no words in it."""
+    for path, here in (("/settings", "settings"), ("/status", "status")):
+        page = client.get(path).get_data(as_text=True)
+        assert '<a href="/settings"' in page and '<a href="/status"' in page
+        assert f'href="/{here}" class="here"' in page
+        assert '<a class="back" href="/" aria-label="Marco"' in page
+        assert ">Marco</a>" not in page          # the chevron says it; nothing spells it

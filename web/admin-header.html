@@ -1,0 +1,14 @@
+{# The two admin pages are one page with two tabs: same header, same bar, different panel.
+   Kept as one file so they cannot drift apart. `tab` says which one is showing. #}
+<header>
+  <a class="back" href="/" aria-label="{{ t('nav.frame') }}" title="{{ t('nav.frame') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round" aria-hidden="true">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  </a>
+  <nav class="tabs">
+    <a href="/settings" class="{{ 'here' if tab == 'settings' }}">{{ t('nav.settings') }}</a>
+    <a href="/status" class="{{ 'here' if tab == 'status' }}">{{ t('nav.status') }}</a>
+  </nav>
+</header>

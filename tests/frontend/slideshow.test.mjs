@@ -191,8 +191,8 @@ test('the frame changes language from the setting, without a reload', async () =
   try {
     const { document } = frame.window;
     assert.equal(document.documentElement.lang, 'en');
-    assert.equal(document.getElementById('hide-photo').textContent, 'Hide this photo');
-    assert.equal(document.getElementById('open-settings').textContent, 'Settings');
+    assert.equal(document.getElementById('hide-photo').textContent.trim(), 'Hide this photo');
+    assert.equal(document.getElementById('open-settings').textContent.trim(), 'Settings');
     // Attributes too, not only text: the buttons are icons and say nothing else.
     assert.equal(document.getElementById('more').getAttribute('aria-label'), 'More options');
     // And inside a template, whose tiles are cloned long after the language was applied.
@@ -205,7 +205,7 @@ test('the frame changes language from the setting, without a reload', async () =
 test('an unknown language leaves the frame in Spanish', async () => {
   const frame = await boot({ language: 'de' });
   try {
-    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Ocultar esta foto');
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent.trim(), 'Ocultar esta foto');
   } finally { frame.close(); }
 });
 
@@ -213,8 +213,25 @@ test('a device that asked for its own language keeps it', async () => {
   // The frame is set to Spanish and says so on every poll; this screen was told English.
   const frame = await boot({ language: 'es', deviceLanguage: 'en' });
   try {
-    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Hide this photo');
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent.trim(), 'Hide this photo');
     await frame.tick(300);   // long enough for the settings poll to have answered
-    assert.equal(frame.window.document.getElementById('hide-photo').textContent, 'Hide this photo');
+    assert.equal(frame.window.document.getElementById('hide-photo').textContent.trim(), 'Hide this photo');
+  } finally { frame.close(); }
+});
+
+test('every row of the menu carries its icon', async () => {
+  // The icon lives beside the label rather than in it, so changing language cannot wipe it.
+  const frame = await boot({ language: 'en' });
+  try {
+    const { document } = frame.window;
+    const rows = ['hide-photo', 'open-gallery', 'open-info', 'open-settings', 'menu-close'];
+    for (const id of rows) {
+      const button = document.getElementById(id);
+      const use = button.querySelector('svg.ico use');
+      assert.ok(use, `${id} should have an icon`);
+      assert.ok(document.getElementById(use.getAttribute('href').slice(1)),
+        `${id} points at a symbol the sprite actually has`);
+      assert.ok(button.querySelector('span').textContent.trim(), `${id} should still say something`);
+    }
   } finally { frame.close(); }
 });

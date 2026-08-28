@@ -92,6 +92,23 @@ class Database:
         for callback in self._on_reopen:
             callback()
 
+    def ensure_open(self) -> bool:
+        """Take the database back if we do not hold it and nobody asked for it.
+
+        For the open that failed at startup: nothing else would ever try again, and the
+        frame refuses to walk the library without the blacklist that lives in here.
+        """
+        with self._lock:
+            if self._conn is not None or self._released_at is not None:
+                return False
+        try:
+            self.reopen()
+        except Exception:
+            log.info("%s is still not readable", self.path)
+            return False
+        log.warning("%s is readable again", self.path)
+        return True
+
     def state(self) -> dict:
         with self._lock:
             held = self._conn is not None
@@ -104,7 +121,8 @@ class Database:
         }
 
     def watch(self) -> None:
-        """Take the file back if whoever asked for it never gave it up."""
+        """Take the file back if whoever asked for it never gave it up — or if the open
+        failed and it has since become readable."""
         while True:
             time.sleep(30)
             with self._lock:
@@ -116,6 +134,8 @@ class Database:
                     self.reopen()
                 except Exception:
                     log.exception("could not reopen %s", self.path)
+            else:
+                self.ensure_open()
 
     def start_watchdog(self) -> None:
         threading.Thread(target=self.watch, daemon=True).start()

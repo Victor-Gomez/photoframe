@@ -79,7 +79,7 @@ def blueprint(frame):
         The frame runs headless on a machine across the house; answering "is it still
         up, and did anything go wrong?" used to mean an ssh session and a log file.
         """
-        return render_template("status.html", **report())
+        return render_template("status.html", tab="status", **report())
 
     @bp.get("/api/config")
     def config_view():

@@ -664,6 +664,28 @@
     waiters = waiters.filter(({ predicate, resolve }) => predicate() || (resolve(), false));
   }
 
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  /** One of the sprite's glyphs, ready to put in a menu row. Built in the SVG namespace:
+   *  createElement would make an unknown HTML element that draws nothing at all. */
+  function glyph(name) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ico');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.append(use);
+    return svg;
+  }
+
+  /** The label beside it, in its own element so the icon survives a change of language
+   *  and the text is what ellipsises when a folder name is longer than the menu. */
+  function rowLabel(text) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    return span;
+  }
+
   /** A copy of one of the heart icons already in the page, for use inside a toast. */
   function heartIcon(filled) {
     const icon = document.getElementById(filled ? 'heart-on' : 'heart-off').cloneNode(true);
@@ -720,7 +742,7 @@
       for (const folder of info.folders) {
         const item = document.createElement('button');
         item.role = 'menuitem';
-        item.textContent = t('hideFolder', folder);
+        item.append(glyph('folder'), rowLabel(t('hideFolder', folder)));
         item.title = folder;
         item.addEventListener('click', () => blacklist('folder', folder));
         hideFolders.append(item);
@@ -1329,18 +1351,7 @@
     const field = document.createElement('div');
     field.className = 'field' + (wide ? ' wide' : '');
     const dt = document.createElement('dt');
-    if (icon) {
-      // Built in the SVG namespace: createElement would make an unknown HTML element that
-      // renders nothing at all.
-      const NS = 'http://www.w3.org/2000/svg';
-      const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('class', 'ico');
-      svg.setAttribute('aria-hidden', 'true');
-      const use = document.createElementNS(NS, 'use');
-      use.setAttribute('href', `#i-${icon}`);
-      svg.append(use);
-      dt.append(svg);
-    }
+    if (icon) dt.append(glyph(icon));
     dt.append(document.createTextNode(label));
     const dd = document.createElement('dd');
     if (mono) dd.classList.add('mono');

@@ -14,6 +14,13 @@
 
 * { box-sizing: border-box; }
 
+/* Both tabs reserve the scrollbar's width, whether they need it or not. Ajustes is short
+   and Estado is long, so switching between them slid the whole page sideways. */
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   padding: 1.4rem 1.1rem 4rem;
@@ -23,8 +30,6 @@ body {
 }
 
 main { max-width: 56rem; margin: 0 auto; }
-
-h1 { font-size: 1.25rem; margin: 0; }
 
 h2 {
   font-size: .82rem;
@@ -37,13 +42,64 @@ h2 {
 
 header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1.6rem;
 }
 
-nav { display: flex; gap: 1rem; }
+.tabs { display: flex; gap: .6rem; }
+
+/* The frame's own buttons, worn by the two pages that are not the frame: a hairline of
+   white over translucent black. These are read standing in front of the thing they
+   describe, and should not look like a different program. */
+.back,
+.tabs a {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 .2rem 1rem rgba(0, 0, 0, 0.45);
+  text-decoration: none;
+  transition: background-color .25s, border-color .25s, color .25s;
+}
+
+/* Text-free on purpose: it is the way back to the photos, and a chevron says that in
+   every language. Round, like the ⋮ and the heart it sits beside on the frame. */
+.back {
+  flex: none;
+  width: 2.6rem;
+  height: 2.6rem;
+  min-width: 38px;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.back svg { width: 1.4rem; height: 1.4rem; }
+
+.tabs a { border-radius: 999px; padding: .55rem 1.1rem; }
+
+/* The pressed look the frame uses for a menu that is open. */
+.tabs a.here {
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Only where there is a real pointer: a touchscreen keeps the hovered look on the last
+   thing tapped, so a button stays lit long after it was pressed. */
+@media (hover: hover) {
+
+  .back:hover,
+  .tabs a:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #fff;
+  }
+}
 
 a { color: #8ab4ff; }
 

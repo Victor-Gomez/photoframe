@@ -45,6 +45,18 @@ def photo_id_of(rel: str) -> str:
     return hashlib.sha1(rel.encode("utf-8")).hexdigest()[:16]
 
 
+def tools_folder(root: Path, db_path) -> str | None:
+    """The library's own metadata folder, as a path relative to the root — `zTools` for
+    `D:/Fotos` and `D:/Fotos/zTools/metadata/photos.db`. None when it sits elsewhere."""
+    if db_path is None:
+        return None
+    try:
+        inside = Path(db_path).resolve().relative_to(Path(root).resolve())
+    except (ValueError, OSError):
+        return None            # the database lives outside the library, which is tidier
+    return inside.parts[0] if len(inside.parts) > 1 else None
+
+
 def ancestors(rel: PurePosixPath) -> list[str]:
     """Every folder between the library root and the photo, shallowest first: A, A/B."""
     return [p.as_posix() for p in reversed(rel.parents) if p.as_posix() != "."]
@@ -62,6 +74,11 @@ class Library:
         self.db = db
         self.rules = rules
         self.probe_workers = probe_workers
+        # The library's own tools sit inside the library. The walk must never descend into
+        # them, rule or no rule: their face thumbnails once turned 35,299 photos into
+        # 43,551. Derived from where the database is rather than named, so a library laid
+        # out differently is still safe.
+        self.tools_dir = tools_folder(root, getattr(db, "path", None))
 
         self._lock = threading.Lock()
         self._paths: dict[str, Path] = {}
@@ -201,13 +218,22 @@ class Library:
         that window matches nothing and comes back unfiltered.
         """
         count = self.load()
-        if not count:
-            # Missing, empty, or no rel column. Said loudly because the walk is far more
-            # expensive and has taken the whole box down with it.
-            log.error("%s gave no photos — falling back to a full walk of the library",
-                      self.db.path.name)
-            count = self.scan()
-            self.probe_in_background()
+        if count:
+            return count
+        if not self.rules.loaded:
+            # The blacklist lives in the database that just gave nothing, so walking now
+            # would index the library with nothing hidden — every photo somebody chose not
+            # to see, back on the wall. Better an empty frame that says so: the watchdog
+            # reopens the database and this runs again.
+            log.error("%s could not be read; refusing to walk the library with no "
+                      "blacklist in force", self.db.path.name)
+            return 0
+        # Said loudly because the walk is far more expensive than the read it replaces,
+        # and has taken the whole box down with it.
+        log.error("%s gave no photos — falling back to a full walk of the library",
+                  self.db.path.name)
+        count = self.scan()
+        self.probe_in_background()
         return count
 
     def scan(self) -> int:
@@ -228,6 +254,7 @@ class Library:
                 d for d in dirs
                 if not d.startswith(".")
                 and d not in SKIP_DIRS
+                and prefix + d != self.tools_dir
                 and not self.rules.blacklisted_dir(prefix + d)
             ]
             for name in files:

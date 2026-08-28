@@ -431,7 +431,9 @@ body.menu-open #controls button {
 }
 
 #menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 1.4vmin;
   width: 100%;
   padding: 1.4vmin 2vmin;
   border: 0;
@@ -441,6 +443,17 @@ body.menu-open #controls button {
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+}
+
+#menu button .ico {
+  width: 1.15em;
+  height: 1.15em;
+  color: #9a9aa2;   /* the label leads; the icon is there to be recognised, not read */
+}
+
+/* The label ellipsises, not the button: a folder name can be longer than the menu. */
+#menu button span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1037,6 +1050,17 @@ body.asleep #night { opacity: 1; }
   display: none;
 }
 
+/* Lucide draws with strokes and no fill; the symbols carry no styling of their own, so
+   every <use> of one is dressed here. Size belongs to wherever it is being drawn. */
+.ico {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 #info-rows dt {
   display: flex;
   align-items: center;
@@ -1048,16 +1072,9 @@ body.asleep #night { opacity: 1; }
   margin-bottom: 0.35em;
 }
 
-/* Lucide draws with strokes and no fill; the symbols carry no styling of their own. */
 #info-rows dt .ico {
   width: 1.35em;
   height: 1.35em;
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 #info-rows dd {

@@ -77,6 +77,10 @@ class Rules:
         self._lock = threading.RLock()
         # `_raw` is what was written and what gets reported back; `_lists` is lowercased
         # for matching. Report the normalised form and "Trip/Day1" comes back "trip/day1".
+        # Whether these lists ever came from a database. Empty because nothing is hidden
+        # and empty because nothing could be read are the same four lists and opposite
+        # facts, and the walk must be able to tell them apart.
+        self.loaded = False
         self._raw: dict[str, list[str]] = {name: [] for name in SECTION_KIND}
         self._lists: dict[str, list[str]] = {name: [] for name in SECTIONS}
         self._matchers = {name: Matcher([]) for name in SECTIONS}
@@ -115,6 +119,7 @@ class Rules:
             self._raw = raw
             self._lists = lists
             self._matchers = {name: Matcher(entries) for name, entries in lists.items()}
+            self.loaded = True
 
     def matcher(self, section: str) -> Matcher:
         with self._lock:

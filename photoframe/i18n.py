@@ -28,12 +28,9 @@ class Invalid(ValueError):
 
 TEXT = {
     "es": {
-        "brand": "Marco de fotos",
         "nav.settings": "Ajustes",
         "nav.status": "Estado",
         "nav.frame": "Marco",
-        "nav.refresh": "Actualizar",
-        "change": "Cambiar",
 
         # -- estado ----------------------------------------------------------
         "status.title": "Marco de fotos · estado",
@@ -108,7 +105,6 @@ TEXT = {
 
         # -- ajustes ---------------------------------------------------------
         "settings.title": "Marco de fotos · ajustes",
-        "settings.heading": "Ajustes",
         "h.global": "Generales",
         "global.note": "Guardados en photos.db, junto a las reglas: valen para todos los marcos.",
         "hint.favoriteWeight": "1 lo desactiva.",
@@ -142,12 +138,9 @@ TEXT = {
         "error.stillHidden": "otra regla la sigue ocultando",
     },
     "en": {
-        "brand": "Photo frame",
         "nav.settings": "Settings",
         "nav.status": "Status",
         "nav.frame": "Frame",
-        "nav.refresh": "Refresh",
-        "change": "Change",
 
         "status.title": "Photo frame · status",
         "tile.uptime": "up",
@@ -220,7 +213,6 @@ TEXT = {
         "log.empty": "Empty — normal with the log at “failures only”.",
 
         "settings.title": "Photo frame · settings",
-        "settings.heading": "Settings",
         "h.global": "General",
         "global.note": "Saved in photos.db beside the rules: every frame gets them.",
         "hint.favoriteWeight": "1 turns it off.",
