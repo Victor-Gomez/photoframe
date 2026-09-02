@@ -700,7 +700,8 @@ body.menu-open #controls button {
   opacity: 0.85;
 }
 
-#gallery-close {
+#gallery-close,
+.gallery-step {
   flex: none;
   display: grid;
   place-items: center;
@@ -715,7 +716,8 @@ body.menu-open #controls button {
   cursor: pointer;
 }
 
-#gallery-close svg {
+#gallery-close svg,
+.gallery-step svg {
   width: var(--control-icon);
   height: var(--control-icon);
   min-width: var(--control-icon-min);
@@ -739,14 +741,30 @@ body.gallery-open {
   touch-action: pan-y;
   overscroll-behavior: contain;
   display: grid;
-  /* auto-fill rather than a fixed count: the same rule gives 3 tiles across a phone and
-     6 across a larger screen, without a media query per device. */
-  grid-template-columns: repeat(auto-fill, minmax(min(28vmin, 42vw), 1fr));
+  /* A fixed tile width rather than a share of the screen: sized in vmin, a thumbnail grew
+     with the window's height, so fullscreen fitted fewer photos than a smaller window. The
+     42vw floor is for a narrow phone, where 240px would leave a single column. */
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 42vw), 1fr));
   column-gap: 1.4vmin;
   row-gap: 1.4vmin;
   grid-auto-rows: max-content;
-  padding: 0 2vmin 3vmin;
+  /* No bottom padding: it would sit inside the scroll length, so the end of the folder
+     would no longer land on a row boundary. */
+  padding: 0 2vmin;
   align-content: start;
+  /* fitGrid() shrinks the columns to fit whole rows; the slack goes to the sides. */
+  justify-content: center;
+}
+
+/* Stands in for the rows either side of the built window, so the folder keeps its full
+   scroll length. Spans the row: a part-width spacer would put the tiles after it in
+   the wrong columns. */
+.gallery-spacer {
+  grid-column: 1 / -1;
+}
+
+.gallery-spacer[hidden] {
+  display: none;
 }
 
 .tile {

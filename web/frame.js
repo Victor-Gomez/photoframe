@@ -69,6 +69,8 @@
       'ui.more': 'Más',
       'ui.moreAria': 'Más opciones',
       'ui.close': 'Cerrar',
+      'ui.rowUp': 'Fila anterior',
+      'ui.rowDown': 'Fila siguiente',
       'ui.hide': 'Ocultar',
       'menu.hidePhoto': 'Ocultar esta foto',
       'menu.gallery': 'Fotos cercanas',
@@ -127,6 +129,8 @@
       'ui.more': 'More',
       'ui.moreAria': 'More options',
       'ui.close': 'Close',
+      'ui.rowUp': 'Previous row',
+      'ui.rowDown': 'Next row',
       'ui.hide': 'Hide',
       'menu.hidePhoto': 'Hide this photo',
       'menu.gallery': 'Nearby photos',
@@ -998,7 +1002,23 @@
   // The whole folder's metadata, and the slice of it that currently exists as tiles.
   let galleryPhotos = [], galleryDir = '', builtLo = 0, builtHi = 0;
   let tileW = 320, tileH = 213;
-  const BATCH = 60;
+  // The folder outside the built window, as two blocks of empty rows -- see paintSpacers.
+  const leadSpacer = spacerElement(), tailSpacer = spacerElement();
+  // Rows built at a time, and the most kept in the document. The largest folder here holds
+  // over six thousand photos: built whole, that is a hundred thousand elements and every
+  // thumbnail ever scrolled past still decoded in memory.
+  const BATCH_ROWS = 8, WINDOW_ROWS = 24;
+
+  function spacerElement() {
+    const spacer = document.createElement('div');
+    spacer.className = 'gallery-spacer';
+    spacer.hidden = true;
+    return spacer;
+  }
+
+  function columnCount() {
+    return getComputedStyle(galleryGrid).gridTemplateColumns.split(' ').length;
+  }
 
   /** The size to actually ask the server for, from the width a tile ended up.
    *
@@ -1014,11 +1034,120 @@
   const TILE_STEP = 64, TILE_MIN = 128, TILE_MAX = 512;
 
   function tileSize() {
-    const first = galleryGrid.firstElementChild;
+    const first = galleryGrid.querySelector('.tile');
     const measured = first ? first.clientWidth : 0;
     const wanted = Math.ceil((measured || 320) / TILE_STEP) * TILE_STEP;
     const width = Math.max(TILE_MIN, Math.min(wanted, TILE_MAX));
     return { w: width, h: Math.round(width * 2 / 3) };  // the tiles are 3:2
+  }
+
+  /** Size the tiles so a whole number of rows fills the grid's height exactly. With the
+   *  scroll already row-aligned, that is what keeps every visible photo complete — half a
+   *  row at the bottom edge costs a full render per tile for a strip nobody can see.
+   *
+   *  Tiles only ever shrink to make the fit: growing them to reach the row above would push
+   *  the columns wider than the screen.
+   */
+  function fitGrid() {
+    galleryGrid.style.gridTemplateColumns = '';   // back to auto-fill, to be asked again
+    const style = getComputedStyle(galleryGrid);
+    const rowGap = parseFloat(style.rowGap) || 0;
+    const colGap = parseFloat(style.columnGap) || 0;
+    const width = galleryGrid.clientWidth
+      - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const height = galleryGrid.clientHeight;
+    const cols = style.gridTemplateColumns.split(' ').length;
+    if (!(width > 0) || !(height > 0) || !cols) return;
+    const colW = (width - (cols - 1) * colGap) / cols;
+    const rows = Math.max(1, Math.ceil((height + rowGap) / (colW * 2 / 3 + rowGap)));
+    const rowH = (height - (rows - 1) * rowGap) / rows;
+    galleryGrid.style.gridTemplateColumns = `repeat(${cols}, ${rowH * 3 / 2}px)`;
+  }
+
+  /** One row of scrolling: a tile plus the gap under it. */
+  function rowPitch() {
+    const first = galleryGrid.querySelector('.tile');
+    if (!first) return 0;
+    const gap = parseFloat(getComputedStyle(galleryGrid).rowGap) || 0;
+    return first.getBoundingClientRect().height + gap;
+  }
+
+  /** Snap a scroll position to a row boundary, so no row is ever part-visible: a sliver of
+   *  a row still costs the server a full render for every tile in it. */
+  function alignRow(top) {
+    const pitch = rowPitch();
+    if (!pitch) return top;
+    const max = Math.max(0, galleryGrid.scrollHeight - galleryGrid.clientHeight);
+    return Math.max(0, Math.min(max, Math.round(top / pitch) * pitch));
+  }
+
+  /** Give the folder outside the window its height back, in whole rows, so the scroll bar
+   *  still spans the folder and nothing moves when tiles are dropped. A spacer stands for
+   *  the rows it replaces exactly: rows * pitch, less the gap the grid adds under it. */
+  function paintSpacers() {
+    const cols = columnCount();
+    const pitch = rowPitch();
+    const gap = parseFloat(getComputedStyle(galleryGrid).rowGap) || 0;
+    if (!cols || !pitch) return;
+    const rows = [builtLo / cols, Math.ceil((galleryPhotos.length - builtHi) / cols)];
+    [leadSpacer, tailSpacer].forEach((spacer, i) => {
+      spacer.hidden = !rows[i];
+      spacer.style.height = rows[i] ? `${rows[i] * pitch - gap}px` : '';
+    });
+  }
+
+  /** The window has to start on a row boundary and, unless it reaches the end of the
+   *  folder, finish on one: a spacer spans the full width, so a part-built row either side
+   *  of it would leave a hole and put the tiles after it in the wrong columns.
+   *
+   *  Only ever grows the window -- dropping the odd photos instead would shift the grid.
+   */
+  function snapWindow() {
+    const cols = columnCount();
+    if (!cols) return;
+    const from = builtLo - builtLo % cols;
+    if (from < builtLo) {
+      const batch = document.createDocumentFragment();
+      for (let i = from; i < builtLo; i++) batch.append(buildTile(galleryPhotos[i]));
+      leadSpacer.after(batch);
+      builtLo = from;
+    }
+    const short = builtHi % cols;
+    if (short && builtHi < galleryPhotos.length) {
+      const upto = Math.min(galleryPhotos.length, builtHi + cols - short);
+      const batch = document.createDocumentFragment();
+      for (let i = builtHi; i < upto; i++) batch.append(buildTile(galleryPhotos[i]));
+      tailSpacer.before(batch);
+      builtHi = upto;
+    }
+    observeNew();
+  }
+
+  /** Drop tiles off one end of the window. The spacer grows by exactly what they occupied,
+   *  so the scroll stays on the same photo. */
+  function dropTiles(count, fromTop) {
+    for (let n = 0; n < count; n++) {
+      const tile = fromTop ? leadSpacer.nextElementSibling
+        : tailSpacer.previousElementSibling;
+      if (!tile || !tile.classList.contains('tile')) break;
+      const img = tile.querySelector('img');
+      if (galleryWatcher) galleryWatcher.unobserve(img);
+      img.removeAttribute('src');   // let the decoded thumbnail go with the tile
+      tile.remove();
+    }
+    if (fromTop) builtLo += count;
+    else builtHi -= count;
+  }
+
+  /** Hand back whole rows from whichever end is further from the screen, never a row the
+   *  window is being asked to cover. */
+  function trimWindow(cols, lo, hi) {
+    const excess = builtHi - builtLo - cols * WINDOW_ROWS;
+    if (excess <= 0) return;
+    const fromTop = lo - builtLo >= builtHi - hi;
+    const room = fromTop ? lo - builtLo : builtHi - hi;
+    const drop = Math.floor(Math.min(excess, room) / cols) * cols;
+    if (drop > 0) dropTiles(drop, fromTop);
   }
 
   async function openGallery(id) {
@@ -1056,13 +1185,16 @@
     galleryDir = data.folder;
     const here = Math.max(0, data.photos.findIndex(photo => photo.current));
 
-    // Tiles are built around the photo you were on and extended as you scroll. The whole
-    // folder is scrollable, but the largest here holds over six thousand photos, and six
-    // thousand tiles is fifty thousand elements — enough to make the device crawl before
-    // a single thumbnail appeared.
-    builtLo = Math.max(0, here - BATCH);
-    builtHi = Math.min(galleryPhotos.length, here + BATCH);
-    for (let i = builtLo; i < builtHi; i++) galleryGrid.append(buildTile(galleryPhotos[i]));
+    // Tiles exist only around the photo you were on; the rest of the folder is the two
+    // spacers, and the window follows the scroll from there.
+    const half = BATCH_ROWS * 6;
+    builtLo = Math.max(0, here - half);
+    builtHi = Math.min(galleryPhotos.length, here + half);
+    galleryGrid.replaceChildren(leadSpacer, tailSpacer);
+    const opening = document.createDocumentFragment();
+    for (let i = builtLo; i < builtHi; i++) opening.append(buildTile(galleryPhotos[i]));
+    tailSpacer.before(opening);
+    fitGrid();
 
     // Measured only now: a tile has to be in the grid before it has a width.
     const { w, h } = tileSize();
@@ -1083,11 +1215,14 @@
         img.src = `/img/${img.dataset.id}?w=${tileW}&h=${tileH}`;
       }
     }, { root: galleryGrid, rootMargin: '300px' });
-    for (const img of galleryGrid.querySelectorAll('img')) galleryWatcher.observe(img);
+    snapWindow();
+    paintSpacers();
+    observeNew();
 
     // Open centred on the photo you were looking at, not at the top of the folder.
     const currentTile = galleryGrid.querySelector('.tile.current');
     if (currentTile) currentTile.scrollIntoView({ block: 'center' });
+    galleryGrid.scrollTop = alignRow(galleryGrid.scrollTop);
   }
 
   function buildTile(photo) {
@@ -1131,30 +1266,38 @@
   /** Build the next batch at whichever end is being approached. */
   function extendGallery() {
     if (!galleryOpen || !galleryPhotos.length) return;
-    const nearTop = galleryGrid.scrollTop < 600;
-    const nearEnd = galleryGrid.scrollTop + galleryGrid.clientHeight
-      > galleryGrid.scrollHeight - 600;
+    const cols = columnCount();
+    const pitch = rowPitch();
+    if (!cols || !pitch) return;
+    // What is on screen, plus a batch of rows either side to scroll into. The spacers give
+    // the grid the whole folder's scroll length, so this is where the window has to be —
+    // not, as it once was, wherever the built tiles happen to have reached.
+    const firstRow = Math.floor(galleryGrid.scrollTop / pitch);
+    const lastRow = Math.ceil((galleryGrid.scrollTop + galleryGrid.clientHeight) / pitch);
+    const lo = Math.max(0, (firstRow - BATCH_ROWS) * cols);
+    const hi = Math.min(galleryPhotos.length, (lastRow + BATCH_ROWS) * cols);
+    if (lo === builtLo && hi === builtHi) return;
 
-    if (nearEnd && builtHi < galleryPhotos.length) {
-      const upto = Math.min(galleryPhotos.length, builtHi + BATCH);
-      const batch = document.createDocumentFragment();
-      for (let i = builtHi; i < upto; i++) batch.append(buildTile(galleryPhotos[i]));
-      galleryGrid.append(batch);
-      builtHi = upto;
-      observeNew();
+    if (lo >= builtHi || hi <= builtLo) {   // the scroll bar dragged clean past the window
+      dropTiles(builtHi - builtLo, true);
+      builtLo = builtHi = lo;
     }
-    if (nearTop && builtLo > 0) {
-      const from = Math.max(0, builtLo - BATCH);
+    if (hi > builtHi) {
       const batch = document.createDocumentFragment();
-      for (let i = from; i < builtLo; i++) batch.append(buildTile(galleryPhotos[i]));
-      // Prepending pushes everything down, so hold the scroll where it was — otherwise
-      // reaching the top teleports you backwards through the folder.
-      const before = galleryGrid.scrollHeight;
-      galleryGrid.prepend(batch);
-      galleryGrid.scrollTop += galleryGrid.scrollHeight - before;
-      builtLo = from;
-      observeNew();
+      for (let i = builtHi; i < hi; i++) batch.append(buildTile(galleryPhotos[i]));
+      tailSpacer.before(batch);
+      builtHi = hi;
     }
+    if (lo < builtLo) {
+      const batch = document.createDocumentFragment();
+      for (let i = lo; i < builtLo; i++) batch.append(buildTile(galleryPhotos[i]));
+      leadSpacer.after(batch);
+      builtLo = lo;
+    }
+    trimWindow(cols, lo, hi);
+    observeNew();
+    // The spacers take back exactly what the dropped tiles held, so nothing moves.
+    paintSpacers();
   }
 
   function observeNew() {
@@ -1211,6 +1354,8 @@
     gallery.hidden = true;
     document.body.classList.remove('gallery-open');
     if (galleryWatcher) { galleryWatcher.disconnect(); galleryWatcher = null; }
+    clearTimeout(settleTimer);
+    touchingGrid = false;
     galleryGrid.replaceChildren();  // drop the decoded thumbnails
     galleryPhotos = [];
     galleryDir = '';
@@ -1534,10 +1679,76 @@
   // inside the scroll handler itself is what makes a grid stutter.
   let extendQueued = false;
   galleryGrid.addEventListener('scroll', () => {
+    settleRow();
     if (extendQueued) return;
     extendQueued = true;
     requestAnimationFrame(() => { extendQueued = false; extendGallery(); });
   }, { passive: true });
+
+  // A drag or a fling has no notches to count, so touch lands wherever it lands: pulled
+  // onto the row boundary once it has come to rest. Waiting for the scroll to stop rather
+  // than snapping as it moves — the browser owns the momentum, and fighting it mid-fling
+  // reads as the grid sticking. Not while the finger is still down, either: the grid would
+  // slide out from under it.
+  let settleTimer = null, touchingGrid = false;
+  function settleRow() {
+    clearTimeout(settleTimer);
+    if (touchingGrid) return;
+    settleTimer = setTimeout(() => {
+      const top = alignRow(galleryGrid.scrollTop);
+      if (Math.abs(top - galleryGrid.scrollTop) > 1) galleryGrid.scrollTop = top;
+    }, 140);
+  }
+  galleryGrid.addEventListener('touchstart', () => {
+    touchingGrid = true;
+    clearTimeout(settleTimer);
+  }, { passive: true });
+  galleryGrid.addEventListener('touchend', () => {
+    touchingGrid = false;
+    settleRow();
+  }, { passive: true });
+  galleryGrid.addEventListener('touchcancel', () => {
+    touchingGrid = false;
+    settleRow();
+  }, { passive: true });
+
+  /** Move the grid one row. Jumped rather than animated: smooth scrolling is off on some
+   *  of the devices that open this, and a half-applied animation is what leaves a row
+   *  part-visible — and every tile in a part-visible row costs a full render. */
+  function stepRow(dir) {
+    const pitch = rowPitch();
+    if (!pitch || !dir) return;
+    const at = galleryGrid.scrollTop / pitch;
+    const row = dir > 0 ? Math.floor(at + 0.02) : Math.ceil(at - 0.02);
+    galleryGrid.scrollTop = alignRow((row + dir) * pitch);
+  }
+
+  // A wheel click moves exactly one row, rather than parking one a sliver into view.
+  galleryGrid.addEventListener('wheel', event => {
+    if (!Math.sign(event.deltaY)) return;
+    event.preventDefault();
+    stepRow(Math.sign(event.deltaY));
+  }, { passive: false });
+
+  for (const [id, dir] of [['gallery-up', -1], ['gallery-down', 1]]) {
+    document.getElementById(id).addEventListener('click', event => {
+      event.stopPropagation();
+      stepRow(dir);
+    });
+  }
+
+  // A rotation or a resized window changes how many rows fit, and the old sizes would put
+  // a part-row back at the bottom.
+  addEventListener('resize', () => {
+    const pitch = rowPitch();
+    if (!galleryOpen || !pitch) return;
+    // Held by photo, not by pixel: a different column count puts it on a different row.
+    const top = Math.round(galleryGrid.scrollTop / pitch) * columnCount();
+    fitGrid();
+    snapWindow();
+    paintSpacers();
+    galleryGrid.scrollTop = alignRow(Math.floor(top / columnCount()) * rowPitch());
+  });
 
   document.getElementById('gallery-close').addEventListener('click', event => {
     event.stopPropagation();
