@@ -2,11 +2,7 @@
 <html lang="{{ lang }}">
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ t('status.title') }}</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+  {% include "admin-head.html" %}
 </head>
 
 <body>

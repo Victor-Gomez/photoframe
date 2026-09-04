@@ -306,10 +306,15 @@ well as looking blurry — they form junk clusters rather than being merely usel
 The frame runs on a Windows box as a scheduled task at `C:\Projects\photoframe`.
 
 ```bash
-scp app.py server@frame-host:C:/Projects/photoframe/
-scp -r photoframe server@frame-host:C:/Projects/photoframe/
-scp web/* server@frame-host:C:/Projects/photoframe/web/
+python deploy.py            # everything, then restart, then check it came back
+python deploy.py --web      # only web/, which needs no restart
+python deploy.py --dry-run  # what it would copy
 ```
+
+It runs both suites first, copies with `scp`, restarts through WMI — a scheduled launch on
+that box starts a process that never finishes initialising — and then asks the frame for
+every page and prints the tail of its log. The server holds a `.git` because it is a daily
+mirror of this machine, not because it is deployed from one.
 
 `store.py` and `photos.db` are not deployed with it: they live with the library, and the
 frame reaches them through `LIBRARY_TOOLS` and `dbFile`.

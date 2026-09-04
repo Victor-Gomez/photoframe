@@ -1,0 +1,11 @@
+{# The <head> both tabs share. Only the title differs, and `tab` already says which page
+   this is. #}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t(tab + '.title') }}</title>
+<!-- The frame's own icon, and inline for the same reason it is inline there: a browser
+     asks for /favicon.ico on every page, and this app serves photos, not icons. The two
+     copies are the price of the frame not depending on anything to draw itself. -->
+<link rel="icon"
+  href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%23111'/><g fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='5.5' width='14' height='13' rx='2'/><circle cx='9.5' cy='10' r='1.4'/><path d='M19 15.5l-3.6-3.4a1.8 1.8 0 0 0-2.5 0L6 18.5'/></g></svg>">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">

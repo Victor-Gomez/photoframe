@@ -178,3 +178,13 @@ def test_the_two_admin_pages_are_one_page_with_two_tabs(app, client):
         assert f'href="/{here}" class="here"' in page
         assert '<a class="back" href="/" aria-label="Marco"' in page
         assert ">Marco</a>" not in page          # the chevron says it; nothing spells it
+
+
+def test_both_tabs_wear_the_frames_own_icon(app, client):
+    """A blank favicon made the two tabs indistinguishable from anything else open on a
+    phone. Same glyph as the frame, inline for the same reason."""
+    for path, title in (("/settings", "ajustes"), ("/status", "estado")):
+        page = client.get(path).get_data(as_text=True)
+        assert 'href="data:image/svg+xml,<svg' in page
+        assert "data:," not in page
+        assert f"Marco de fotos · {title}" in page     # the shared head still titles each tab

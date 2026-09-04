@@ -9,3 +9,4 @@ photoframe.log*
 config.json
 CLAUDE.md
 /.claude
+deploy.py
