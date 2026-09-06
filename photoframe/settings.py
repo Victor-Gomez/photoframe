@@ -26,9 +26,6 @@ DEFAULTS = {
     "encodeThreads": 2,
     # Megabytes of rendered JPEGs held in memory. 0 turns the cache off entirely.
     "renderCacheMB": 96,
-    "avifdec": "",
-    "avifdecShare": 0.5,
-    "avifdecTimeout": 30,
     # photos.db: the photo list, ratios, tags and capture dates that scan.py records, plus
     # this frame's own blacklist and favourites. config.json keeps only the settings.
     # It lives with the library; there is deliberately no copy in this folder.
@@ -61,13 +58,6 @@ class Settings:
         self.jpeg_quality = min(95, max(40, self("jpegQuality", "JPEG_QUALITY", int)))
         self.encode_threads = max(1, self("encodeThreads", "ENCODE_THREADS", int))
         self.cache_budget = max(0, self("renderCacheMB", "RENDER_CACHE_MB", int)) * 1024 * 1024
-        # libavif's avifdec, if installed: its dav1d decoder is multithreaded, Pillow's
-        # is not. `avifdecShare` is the fraction of renders it takes, so both get measured.
-        self.avifdec = self("avifdec", "AVIFDEC")
-        self.avifdec_share = min(1.0, max(0.0, self("avifdecShare", "AVIFDEC_SHARE", float)))
-        # A hung decoder must not hold an encode slot for ever: one wedged avifdec parks
-        # a slot, the rest queue behind it, and the frame stops serving anything at all.
-        self.avifdec_timeout = max(5, self("avifdecTimeout", "AVIFDEC_TIMEOUT", int))
 
     def __call__(self, key: str, env: str, cast=str):
         raw = os.environ.get(env)

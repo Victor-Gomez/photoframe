@@ -80,16 +80,12 @@ TEXT = {
         "cache.line": "{entries} en memoria · {mb} de {budget} MB · "
                       "{hits} aciertos, {misses} fallos",
 
-        "h.decoders": "Decodificadores",
+        "h.decoders": "Renderizado",
         "decoders.note": "Sólo de lo recodificado.",
-        "row.verdict": "Veredicto",
+        "row.render": "render",
         "decoder.line": "{renders} renders · mediana {median} ms · p90 {p90} ms · "
                         "de {fastest} a {slowest} ms",
         "decoder.none": "sin renders todavía",
-        "decoder.share": "cuota",
-        "verdict.faster": "avifdec es un {percent} % más rápido en la mediana",
-        "verdict.slower": "avifdec es un {percent} % más lento en la mediana",
-        "verdict.waiting": "aún no hay renders suficientes (20 de cada uno)",
 
         "h.rules": "Reglas",
         "rules.folders": "Carpetas ocultas",
@@ -189,16 +185,12 @@ TEXT = {
         "cache.line": "{entries} in memory · {mb} of {budget} MB · "
                       "{hits} hits, {misses} misses",
 
-        "h.decoders": "Decoders",
+        "h.decoders": "Rendering",
         "decoders.note": "Re-encoded photos only.",
-        "row.verdict": "Verdict",
+        "row.render": "render",
         "decoder.line": "{renders} renders · median {median} ms · p90 {p90} ms · "
                         "{fastest} to {slowest} ms",
         "decoder.none": "no renders yet",
-        "decoder.share": "share",
-        "verdict.faster": "avifdec is {percent}% faster at the median",
-        "verdict.slower": "avifdec is {percent}% slower at the median",
-        "verdict.waiting": "not enough renders yet (20 each)",
 
         "h.rules": "Rules",
         "rules.folders": "Hidden folders",

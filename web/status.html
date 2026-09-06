@@ -71,17 +71,12 @@
     <h2>{{ t('h.decoders') }}</h2>
     <p class="note">{{ t('decoders.note') }}</p>
     <table>
-      <tr><td>{{ t('row.verdict') }}</td><td>{{ verdict }}</td></tr>
-      {% for name in ("pillow", "avifdec") %}
-      {% set method = renders[name] %}
-      <tr><td>{{ name }}</td>
+      {% set method = renders.render %}
+      <tr><td>{{ t('row.render') }}</td>
         <td>
           {{- t('decoder.line', renders=method.renders, median=method.medianMs, p90=method.p90Ms,
                 fastest=method.fastestMs, slowest=method.slowestMs)
               if method.renders else t('decoder.none') }}</td></tr>
-      {% endfor %}
-      <tr><td>avifdec</td>
-        <td>{{ renders.avifdecPath }} · {{ t('decoder.share') }} {{ renders.avifdecShare }}</td></tr>
     </table>
 
     <h2>{{ t('h.rules') }}</h2>

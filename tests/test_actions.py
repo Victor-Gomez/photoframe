@@ -218,29 +218,13 @@ def test_photo_info_carries_the_path_as_it_exists_on_this_machine(client, app):
     assert body["fullPath"] == str(app.settings.photo_dir / "Trip" / "Day1" / "beach.avif")
 
 
-def test_a_broken_avifdec_falls_back_to_pillow_rather_than_failing(make_app):
-    app = make_app({"avifdec": "no-such-binary.exe", "avifdecShare": 1.0})
-    client = app.app.test_client()
-    from io import BytesIO
-
-    from PIL import Image
-
-    pid = photo_id_of("Trip/Day1/beach.avif")
-    response = client.get(f"/img/{pid}?w=320&h=200")
-    assert response.status_code == 200
-    assert Image.open(BytesIO(response.data)).size == (320, 200)
-    assert app.renderer.stats()["pillow"]["renders"]  # recorded as a Pillow render, not an avifdec one
-
-
-def test_render_stats_reports_each_decoder(client, app):
+def test_render_stats_reports_render_timing(client, app):
     pid = photo_id_of("Trip/Day1/beach.avif")
     client.get(f"/img/{pid}?w=320&h=200")
 
     body = client.get("/api/render-stats").get_json()
-    assert body["pillow"]["renders"] >= 1
-    assert body["pillow"]["medianMs"] >= 0
-    assert body["avifdec"]["renders"] == 0  # not configured in the test library
-    assert "not enough renders yet" in body["verdict"]
+    assert body["render"]["renders"] >= 1
+    assert body["render"]["medianMs"] >= 0
 
 
 def test_the_database_can_stand_in_for_a_walk(make_app):

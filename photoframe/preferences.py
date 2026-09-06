@@ -1,7 +1,7 @@
 """What a person chose, kept in photos.db beside the rules.
 
-config.json describes the machine — ports, paths, threads, where avifdec lives — and is
-never written from a screen, so a hand edit cannot be lost to a tap. This is the other
+config.json describes the machine — ports, paths, threads — and is never written from a
+screen, so a hand edit cannot be lost to a tap. This is the other
 half: the few settings someone sets from a page. They belong to the library rather than to
 the box serving it, so they live in the database and follow it between machines.
 """

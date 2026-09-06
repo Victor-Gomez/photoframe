@@ -23,15 +23,16 @@ on the fly and keeps nothing on disk.
 | `photoframe/imaging.py` | reading headers, rendering to screen size, the in-memory cache |
 | `photoframe/frame.py` | wires the above together — the only module that knows the whole graph |
 | `photoframe/web/` | the HTTP surface, one blueprint per group of endpoints |
-| `web/` | the page — `frame.html`, `frame.css`, `frame.js` — and the one that is not the frame: `settings.html` and `status.html`, two tabs over a shared `admin-header.html` and `admin.css`. All re-read from disk on every request |
+| `web/` | the page — `frame.html`, `frame.css`, `frame.js` — and the one that is not the frame: `settings.html` and `status.html`, two tabs over a shared `admin-head.html`, `admin-header.html` and `admin.css`. All re-read from disk on every request |
 | `config.json` | settings only — ports, timings, paths |
 | `tests/` | the suite. `python -m pytest` |
+| `deploy.py` | puts this working copy on the frame and checks that it came back |
 
 Each piece is handed the collaborators it needs and owns its own state, so the dependencies
-run one way: `Database <- Rules <- Library`, with `Renderer` over `RenderCache` beside them.
-The one place that would otherwise be a cycle is reopening the database, which has to
-rebuild the rules and the index above it — `Database` calls back instead of importing them,
-and `frame.py` registers the callbacks.
+run one way: `Database <- Rules <- Library` and `Database <- Preferences`, with `Renderer`
+over `RenderCache` beside them. The one place that would otherwise be a cycle is reopening
+the database, which has to rebuild the rules, the settings and the index above them —
+`Database` calls back instead of importing them, and `frame.py` registers the callbacks.
 
 Everything about the *library* lives in the library's own metadata folder and is not part
 of this repository: `store.py` (schema and migrations), `scan.py` (EXIF/XMP), `faces.py`,
@@ -82,9 +83,6 @@ blacklist — belongs to the library rather than to this program. `LIBRARY_TOOLS
 | `favoriteWeight` | How many times more often a favourite comes round. `1` disables it. Also overridable from `/settings`. |
 | `jpegQuality` | Quality of the JPEG sent to the frame. |
 | `encodeThreads` | How many photos may be rendered at once. Each holds a decoded photo, so it stays well below the request thread pool. |
-| `avifdec` | Path to libavif's `avifdec`. Its dav1d decoder is multithreaded, which Pillow's is not — measured 849ms vs 1160ms at the median on this library. Falls back to Pillow if it fails. |
-| `avifdecShare` | Fraction of renders `avifdec` handles, so both can be measured on real traffic. `GET /api/render-stats` reports medians for each. |
-| `avifdecTimeout` | Seconds before a decode is killed. See the warning below — this one is not optional. |
 | `renderCacheMB` | Rendered JPEGs kept in memory, so re-viewing a photo costs nothing. `0` turns it off. Memory only; nothing is written to disk. |
 
 Every scalar key can be overridden by the matching environment variable — `PHOTO_DIR`,
@@ -122,7 +120,7 @@ The ⋮ menu on the frame writes these for you.
 
 ### Settings someone sets, and settings the machine has
 
-`config.json` is what this *box* is: ports, paths, threads, where `avifdec` lives. It is
+`config.json` is what this *box* is: ports, paths, threads. It is
 edited by hand and the frame never writes to it, so a hand-edited setting cannot be lost to
 a tap on a screen.
 
@@ -258,7 +256,7 @@ minutes ago.
 
 **`/status` is the frame's own health page.** Uptime, how many photos and of which shape,
 whether the database is held or on loan, how much goes out re-encoded against how much is
-handed over untouched, the two decoders' medians, the render cache's hit rate, the rules in
+handed over untouched, the render median, the render cache's hit rate, the rules in
 force, the settings of both kinds and the tail of the log — everything the JSON
 endpoints report, on one page. The frame runs headless on a machine across the house, and
 "is it still up, and did anything go wrong?" used to mean an ssh session.
@@ -280,11 +278,6 @@ PC just means a smaller image, guessing wrong on the device is the frame falling
 Append `?full=1` or `?full=0` to force it either way; the choice is remembered per device.
 The gallery grid always asks for thumbnails regardless, since a screenful of 24 MP
 originals is exactly what nobody wants.
-
-**`avifdec` needs its timeout.** A hung decoder once held one of the two encode slots
-forever; every image request queued behind it until all eight server threads were parked
-and the frame stopped serving anything at all, stylesheet included. `avifdecTimeout` turns
-that into a slow render instead of an outage.
 
 **The tools skip `zTools`, the frame blacklists it, and the walk refuses to enter it
 anyway.** Otherwise the face thumbnails inside the library get indexed as photos — the
@@ -339,7 +332,9 @@ exactly as it was shot.
 Tap or swipe the right half for the next photo, the left half to go back through the ones
 already shown (up to 200); swipe up to favourite, down to hide. The four arrow keys do the
 same, and space advances. The bottom right shows the clock and the photo's path — tap it to
-copy the full path. The bottom left has fullscreen, a heart, and the ⋮ menu.
+copy the full path. The bottom left has fullscreen, a heart, and the ⋮ menu — which hides
+the photo or any folder above it, opens the nearby-photos grid or the info panel, and leads
+to `/settings`, the only place the per-device choices can be made from the device itself.
 
 ## Tests
 
@@ -356,15 +351,24 @@ filtering, favourite weighting and spacing, playlist paging, that a hide invalid
 still being paged through, that releasing the database keeps the rules in force and makes
 writes fail loudly, and that rendering never touches an original.
 
+It also covers the ways the frame can be wrong about its own library: that a rescan reloads
+`photos.db` instead of walking the disk, that the walk refuses to run at all when the
+blacklist could not be read and never descends into the library's own tools folder, that a
+setting is written to `photos.db` and refused with a 503 while the file is on loan, and that
+the language — the frame's, or one device's own — reaches every page and every refusal.
+
 **The page suite** loads the real `web/frame.js` into jsdom against a fake server, because
 every slideshow fault so far has lived there while the Python suite passed throughout:
 photos silently skipped, a step that showed an unrelated photo, going fullscreen jumping to
 the next one. The stub that earns its keep is the image loader — it can make one photo take
 a second and another a tenth of that, which is the difference the frame kept getting wrong.
+It also holds the quiet hours to their promise — dark and not advancing inside the window, a
+key wakes it — and checks that a device told to speak English is not talked back into
+Spanish by the next settings poll.
 
-Each test names the bug it came from, and all but one were checked by reintroducing that bug
-and confirming the test fails. The exception says so in a comment: a test that has never
-been seen to fail is a claim, not a guarantee.
+Each test names the bug it came from, and all but two were checked by reintroducing that
+bug and confirming the test fails. Those two say so in a comment: a test that has never been
+seen to fail is a claim, not a guarantee.
 
 ## Credits
 

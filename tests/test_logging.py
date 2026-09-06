@@ -40,17 +40,17 @@ def test_failures_are_still_written(tmp_path, library, monkeypatch):
     still says why. This is the whole reason the default is "error" rather than "off"."""
     app, log_file = build(tmp_path, library, monkeypatch)
 
-    app.app.logger.error("avifdec failed on beach.avif")
+    app.app.logger.error("render failed on beach.avif")
     app.app.logger.warning("release ran past 900s")
     written = log_file.read_text(encoding="utf-8")
-    assert "avifdec failed" in written
+    assert "render failed" in written
     assert "release ran past" in written
 
 
 def test_off_writes_no_file_at_all(tmp_path, library, monkeypatch):
     app, log_file = build(tmp_path, library, monkeypatch, logLevel="off")
 
-    app.app.logger.error("avifdec failed on beach.avif")
+    app.app.logger.error("render failed on beach.avif")
     assert not log_file.exists()
     # Without this the record would fall through to stderr, which under pythonw.exe is
     # None — and writing to it raises rather than merely being lost. Asserted on the
@@ -72,8 +72,8 @@ def test_an_unrecognised_level_keeps_failures_rather_than_losing_them(tmp_path, 
     """A typo in the config must not silently disable the only record of what went wrong."""
     app, log_file = build(tmp_path, library, monkeypatch, logLevel="verbose")
 
-    app.app.logger.error("avifdec failed on beach.avif")
-    assert "avifdec failed" in log_file.read_text(encoding="utf-8")
+    app.app.logger.error("render failed on beach.avif")
+    assert "render failed" in log_file.read_text(encoding="utf-8")
 
 
 def test_re_importing_does_not_write_every_line_twice(tmp_path, library, monkeypatch):
@@ -82,5 +82,5 @@ def test_re_importing_does_not_write_every_line_twice(tmp_path, library, monkeyp
     app, log_file = build(tmp_path, library, monkeypatch)
     app, log_file = build(tmp_path, library, monkeypatch)
 
-    app.app.logger.error("avifdec failed on beach.avif")
-    assert log_file.read_text(encoding="utf-8").count("avifdec failed") == 1
+    app.app.logger.error("render failed on beach.avif")
+    assert log_file.read_text(encoding="utf-8").count("render failed") == 1

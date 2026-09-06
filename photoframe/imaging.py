@@ -1,17 +1,12 @@
 """Reading photo headers, and turning a photo into the pixels a screen actually shows.
 
 Nothing here writes next to the originals, or anywhere else on disk: renders are made per
-request and kept in memory only. avifdec's intermediate JPEG is the one file written, into
-the system temp directory, and it is deleted in the same call.
+request and kept in memory only.
 """
 
 import io
 import logging
-import os
-import random
 import re
-import subprocess
-import tempfile
 import threading
 import time
 from collections import OrderedDict
@@ -174,22 +169,19 @@ class Traffic:
 class Renderer:
     """Scales and crops to exactly the size asked for.
 
-    Two decoders because which is faster changes with the file: `avifdecShare` splits real
-    traffic between them so they can be compared. See /api/render-stats.
+    Pillow decodes everything, AVIF included: its dav1d is multithreaded and in-memory.
+    Render timing is sampled so /api/render-stats can show it.
     """
 
     SAMPLES = 500
 
     def __init__(self, settings, cache: RenderCache):
         self.quality = settings.jpeg_quality
-        self.avifdec = settings.avifdec
-        self.avifdec_share = settings.avifdec_share
-        self.avifdec_timeout = settings.avifdec_timeout
         self.cache = cache
         # Each in-flight encode holds a full decoded photo — a few hundred MB for a 24 MP
         # one — so this is capped well below the request thread pool.
         self.slots = threading.Semaphore(settings.encode_threads)
-        self._times: dict[str, list[float]] = {"pillow": [], "avifdec": []}
+        self._times: list[float] = []
         self._times_lock = threading.Lock()
 
     def render(self, source: Path, width: int, height: int) -> bytes:
@@ -207,23 +199,9 @@ class Renderer:
         return data
 
     def _encode(self, source: Path, width: int, height: int) -> io.BytesIO:
-        use_avifdec = (
-            self.avifdec
-            and source.suffix.lower() == ".avif"
-            and random.random() < self.avifdec_share
-        )
         started = time.perf_counter()
-        try:
-            result = (self._with_avifdec if use_avifdec else self._with_pillow)(
-                source, width, height)
-        except Exception:
-            if not use_avifdec:
-                raise
-            log.exception("avifdec failed on %s; falling back to Pillow", source)
-            result = self._with_pillow(source, width, height)
-            use_avifdec = False
-        self._record("avifdec" if use_avifdec else "pillow",
-                     (time.perf_counter() - started) * 1000)
+        result = self._with_pillow(source, width, height)
+        self._record((time.perf_counter() - started) * 1000)
         return result
 
     def _fit_and_encode(self, im: Image.Image, width: int, height: int) -> io.BytesIO:
@@ -238,49 +216,21 @@ class Renderer:
 
     def _with_pillow(self, source: Path, width: int, height: int) -> io.BytesIO:
         with Image.open(source) as im:
+            im.draft("RGB", (width, height))  # reduced-scale decode where the format allows
             return self._fit_and_encode(im, width, height)
 
-    def _with_avifdec(self, source: Path, width: int, height: int) -> io.BytesIO:
-        """Decode with avifdec into a temporary JPEG, then scale that.
-
-        JPEG rather than PNG for the intermediate: a tenth of the bytes, and Pillow's
-        `draft` can then decode it at a reduced DCT scale. Written to the system temp
-        directory and deleted in the same call — never next to the photos.
-        """
-        handle, temporary = tempfile.mkstemp(suffix=".jpg", prefix="photoframe-")
-        os.close(handle)
-        temporary = Path(temporary)
-        try:
-            # subprocess.run kills the child on timeout, so the slot is released either
-            # way, and TimeoutExpired sends _encode down the Pillow path.
-            subprocess.run(
-                [self.avifdec, "-j", "all", "-q", "92", str(source), str(temporary)],
-                check=True,
-                capture_output=True,
-                timeout=self.avifdec_timeout,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            with Image.open(temporary) as im:
-                im.draft("RGB", (width, height))  # decode at a reduced scale where it can
-                return self._fit_and_encode(im, width, height)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    def _record(self, method: str, milliseconds: float) -> None:
+    def _record(self, milliseconds: float) -> None:
         with self._times_lock:
-            samples = self._times.setdefault(method, [])
-            samples.append(milliseconds)
-            del samples[:-self.SAMPLES]  # a rolling window, not a growing list
+            self._times.append(milliseconds)
+            del self._times[:-self.SAMPLES]  # a rolling window, not a growing list
 
     def stats(self) -> dict:
-        """How the two decoders are actually doing, over the last few hundred renders each."""
+        """How rendering is actually doing, over the last few hundred renders."""
         with self._times_lock:
-            samples = {name: sorted(times) for name, times in self._times.items()}
+            times = sorted(self._times)
 
-        def summarise(times: list[float]) -> dict:
-            if not times:
-                return {"renders": 0}
-            return {
+        if times:
+            render = {
                 "renders": len(times),
                 "medianMs": round(times[len(times) // 2]),
                 "meanMs": round(sum(times) / len(times)),
@@ -288,19 +238,6 @@ class Renderer:
                 "fastestMs": round(times[0]),
                 "slowestMs": round(times[-1]),
             }
-
-        report = {name: summarise(times) for name, times in samples.items()}
-        measured = [r for r in report.values() if r.get("renders")]
-        if len(measured) == 2 and all(r["renders"] >= 20 for r in report.values()):
-            pillow, avifdec = report["pillow"]["medianMs"], report["avifdec"]["medianMs"]
-            report["verdict"] = (
-                f"avifdec is {abs(pillow - avifdec) / max(pillow, 1):.0%} "
-                f"{'faster' if avifdec < pillow else 'slower'} at the median")
         else:
-            report["verdict"] = "not enough renders yet (20 each)"
-        report["avifdec"] = report.get("avifdec", {"renders": 0})
-        report["avifdecShare"] = self.avifdec_share
-        report["avifdecPath"] = self.avifdec or "(not configured)"
-        report["tempDir"] = tempfile.gettempdir()
-        report["cache"] = self.cache.stats()
-        return report
+            render = {"renders": 0}
+        return {"render": render, "cache": self.cache.stats()}

@@ -36,15 +36,6 @@ def blueprint(frame):
         """Pick up whatever scan.py has recorded since: a reload, not a walk."""
         return jsonify(count=library.refresh())
 
-    def verdict(renders: dict, t) -> str:
-        """Which decoder won, said in words. The JSON endpoint keeps the English original."""
-        pillow, avifdec = renders["pillow"], renders["avifdec"]
-        if min(pillow.get("renders", 0), avifdec.get("renders", 0)) < 20:
-            return t("verdict.waiting")
-        median, other = pillow["medianMs"], avifdec["medianMs"]
-        percent = round(abs(median - other) / max(median, 1) * 100)
-        return t("verdict.slower" if other > median else "verdict.faster", percent=percent)
-
     def report() -> dict:
         settings.reload()
         shown = dict(settings.values)
@@ -62,7 +53,6 @@ def blueprint(frame):
             "t": t,
             "lang": language,
             "languages": i18n.NAMES,
-            "verdict": verdict(renders, t),
             "prefs": prefs.as_dict(),
             "quiet": preferences.is_quiet(*prefs.quiet_hours, datetime.now()),
             "renders": renders,
