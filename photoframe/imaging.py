@@ -207,6 +207,13 @@ class Renderer:
     def _fit_and_encode(self, im: Image.Image, width: int, height: int) -> io.BytesIO:
         # The orientation lives in EXIF and is lost on re-encode, so apply it first.
         im = ImageOps.exif_transpose(im)
+        # LANCZOS over a full 24 MP frame is the render's slowest step on the wall box
+        # (~260ms of a second). An integer box-reduce to within one step of the target
+        # first — never below it, so the LANCZOS fit still has the pixels it needs — cuts
+        # that with no visible loss. draft already did this for JPEG; this covers AVIF.
+        factor = max(1, min(im.width // width, im.height // height))
+        if factor > 1:
+            im = im.reduce(factor)
         fitted = ImageOps.fit(im, (width, height), method=Image.LANCZOS, centering=(0.5, 0.5))
         buffer = io.BytesIO()
         fitted.convert("RGB").save(
