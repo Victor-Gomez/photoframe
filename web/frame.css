@@ -452,6 +452,10 @@ body.menu-open #controls button {
   color: #9a9aa2;   /* the label leads; the icon is there to be recognised, not read */
 }
 
+#menu button .ico.filled {
+  fill: currentColor;
+}
+
 /* The label ellipsises, not the button: a folder name can be longer than the menu. */
 #menu button span {
   overflow: hidden;

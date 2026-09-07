@@ -76,6 +76,7 @@
       'menu.gallery': 'Fotos cercanas',
       'menu.info': 'Información',
       'menu.settings': 'Ajustes',
+      'menu.newTab': 'Abrir en una pestaña nueva',
       'menu.cancel': 'Cancelar',
       'edge.prev': 'Anterior',
       'edge.unfavorite': 'Quitar',
@@ -136,6 +137,7 @@
       'menu.gallery': 'Nearby photos',
       'menu.info': 'Information',
       'menu.settings': 'Settings',
+      'menu.newTab': 'Open in new tab',
       'menu.cancel': 'Cancel',
       'edge.prev': 'Previous',
       'edge.unfavorite': 'Remove',
@@ -724,11 +726,34 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), undo ? 6000 : 2600);
   }
 
-  async function openMenu() {
+  // Where a right-click asked for the menu, so it can be re-clamped once its rows fill in.
+  let menuAt = null;
+
+  /** Pin the menu's top-left to (x, y), then pull it back inside the screen. Its height
+   *  grows as the folder rows load, so this runs again after they do. */
+  function positionMenuAt(x, y) {
+    menu.style.left = menu.style.top = '0px';
+    menu.style.right = menu.style.bottom = 'auto';
+    const rect = menu.getBoundingClientRect();
+    const pad = 8;
+    const left = Math.max(pad, Math.min(x, innerWidth - rect.width - pad));
+    const top = Math.max(pad, Math.min(y, innerHeight - rect.height - pad));
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  async function openMenu(viaContext, x, y) {
     if (!currentId) return;
     menuOpen = true;
     menuId = currentId;  // pin it: the menu acts on the photo that was on screen
     menu.hidden = false;
+    // Fullscreen and favorite are in the top bar, redundant when the ⋮ was tapped; a
+    // right-click has no bar under it, so it gets them in the menu.
+    menuQuick.hidden = !viaContext;
+    if (viaContext) paintMenuQuick();
+    // A right-click opens at the cursor; the ⋮ button keeps the menu in its bar corner.
+    menuAt = viaContext && x != null ? { x, y } : null;
+    if (menuAt) positionMenuAt(x, y);
     document.body.classList.add('menu-open');
     document.getElementById('more').setAttribute('aria-expanded', 'true');
 
@@ -751,6 +776,7 @@
         item.addEventListener('click', () => blacklist('folder', folder));
         hideFolders.append(item);
       }
+      if (menuAt) positionMenuAt(menuAt.x, menuAt.y);  // taller now the rows are in
     } catch {
       caption.textContent = t('unreadable');
     }
@@ -759,6 +785,8 @@
   function closeMenu() {
     menuOpen = false;
     menu.hidden = true;
+    menuAt = null;
+    menu.style.left = menu.style.top = menu.style.right = menu.style.bottom = '';
     document.body.classList.remove('menu-open');
     document.getElementById('more').setAttribute('aria-expanded', 'false');
     releaseHold();
@@ -885,6 +913,42 @@
   });
   menu.addEventListener('click', e => e.stopPropagation());
   hidePhoto.addEventListener('click', () => blacklist('photo'));
+
+  // A right-click opens the same menu, plus the two controls the top bar would otherwise
+  // carry. Not over the gallery or info panels — those keep the browser's own menu.
+  addEventListener('contextmenu', e => {
+    if (galleryOpen || infoOpen || !currentId) return;
+    e.preventDefault();
+    if (menuOpen) closeMenu();
+    openMenu(true, e.clientX, e.clientY);
+  });
+
+  const menuQuick = document.getElementById('menu-quick');
+  const menuFullscreen = document.getElementById('menu-fullscreen');
+  const menuFavorite = document.getElementById('menu-favorite');
+
+  /** Paint the context-only rows to the current photo's state, on each open. */
+  function paintMenuQuick() {
+    const on = !!document.fullscreenElement || nativelyFullscreen();
+    menuFullscreen.querySelector('use').setAttribute('href', on ? '#i-fs-exit' : '#i-fullscreen');
+    const fav = menuFavorite.querySelector('span');
+    fav.dataset.t = isFavorite ? 'ui.favoriteRemove' : 'ui.favoriteAdd';
+    fav.textContent = t(fav.dataset.t);
+    menuFavorite.setAttribute('aria-pressed', isFavorite ? 'true' : 'false');
+    menuFavorite.querySelector('.ico').classList.toggle('filled', isFavorite);
+  }
+
+  menuFullscreen.addEventListener('click', () => { closeMenu(); toggleFullscreen(); });
+  menuFavorite.addEventListener('click', () => {
+    const id = menuId;
+    closeMenu();
+    if (id) setFavorite(id, !isFavorite);
+  });
+  document.getElementById('open-newtab').addEventListener('click', () => {
+    const id = menuId;
+    closeMenu();
+    if (id) window.open(`/img/${id}`, '_blank');
+  });
 
   const heart = document.getElementById('heart');
   const heartOff = document.getElementById('heart-off');
