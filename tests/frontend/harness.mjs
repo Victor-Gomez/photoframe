@@ -46,7 +46,7 @@ export function makeLibrary(count = 40) {
  */
 export async function boot({ photos = makeLibrary(), photoDelay = () => 5, slideSeconds = 60,
                              photoFails = () => false, quiet = null, language = 'es',
-                             deviceLanguage = '',
+                             deviceLanguage = '', imageFit = 'cover',
                              width = 1920, height = 1080, hardwareConcurrency = 4 } = {}) {
   const dom = new JSDOM(pageHtml(), {
     url: 'http://frame.test/',
@@ -147,7 +147,7 @@ export async function boot({ photos = makeLibrary(), photoDelay = () => 5, slide
     if (path.startsWith('/api/assets')) return json({ css: 1, js: 1, html: 1 });
     if (path.startsWith('/api/settings')) {
       return json({
-        slideSeconds, language,
+        slideSeconds, language, imageFit,
         quietFrom: quiet ? quiet.from : '', quietTo: quiet ? quiet.to : '',
       });
     }

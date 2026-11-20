@@ -107,6 +107,10 @@ body.quick .layer {
   -webkit-user-drag: none;
 }
 
+body.fit .layer img {
+  object-fit: contain;
+}
+
 #hud {
   position: absolute;
   /* Only the path is interactive; the clock must not swallow taps meant for the photo. */
@@ -978,13 +982,73 @@ body.asleep #night { opacity: 1; }
   flex: none;
 }
 
-#info-title {
+#info-head {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 1.4vmin;
+}
+
+#info-title {
   min-width: 0;
   font: 600 2.4vmin/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#info-user-rating {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6vmin;
+  padding: 0.45vmin 1.2vmin;
+  border-radius: 999px;
+  font: 600 1.85vmin/1.1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #f2f2f5;
+  background: var(--rating-bg, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--rating-border, rgba(255, 255, 255, 0.18));
+}
+
+#info-user-rating[hidden] {
+  display: none;
+}
+
+#info-user-rating svg {
+  width: 1.85vmin;
+  height: 1.85vmin;
+  min-width: 12px;
+  min-height: 12px;
+  fill: var(--rating-color, #84cc16);
+  stroke: var(--rating-color, #84cc16);
+}
+
+#info-favorite {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.1vmin;
+  height: 3.1vmin;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+#info-favorite[hidden] {
+  display: none;
+}
+
+#info-favorite svg {
+  width: 1.75vmin;
+  height: 1.75vmin;
+  min-width: 12px;
+  min-height: 12px;
+  fill: #ef4444;
+  stroke: #ef4444;
 }
 
 #info-close {
@@ -1036,6 +1100,7 @@ body.asleep #night { opacity: 1; }
    wide and wrapping three times. */
 .field.wide {
   flex: 1 0 100%;
+  width: 100%;
 }
 
 /* One line of the panel. The fields sit next to each other and wrap only if the line
@@ -1113,6 +1178,62 @@ body.asleep #night { opacity: 1; }
 
 #info-rows dd a {
   color: #7db1ff;
+}
+
+.info-cat {
+  margin-left: 0.4em;
+  padding: 0.15em 0.55em;
+  border-radius: 0.4em;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #b4b4bc;
+  font-size: 0.9em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ai-metrics {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2.2vmin;
+  width: 100%;
+  padding-top: 0.2vmin;
+}
+
+.ai-metric {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35vmin;
+}
+
+.ai-label {
+  color: #9a9aa2;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ai-val {
+  font-size: 1.08em;
+  font-weight: 600;
+  color: #f2f2f5;
+  line-height: 1.1;
+}
+
+.ai-bar {
+  height: 0.42vmin;
+  min-height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.ai-fill {
+  height: 100%;
+  border-radius: 999px;
 }
 
 #info-empty {

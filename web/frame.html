@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='frame.css') }}?v={{ assets.css }}">
 </head>
 
-<body>
+<body class="{{ 'fit' if imageFit == 'fit' else '' }}">
   <!-- Lucide icons (lucide.dev, ISC), inlined as a sprite: the frame runs on a LAN and
        must not depend on reaching a CDN to draw its own labels. Referenced with <use>. -->
   <svg id="icon-sprite" aria-hidden="true">
@@ -94,6 +94,14 @@
     <symbol id="i-heart" viewBox="0 0 24 24">
       <path
         d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+    </symbol>
+    <symbol id="i-star" viewBox="0 0 24 24">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+      <path d="M20 3v4" />
+      <path d="M22 5h-4" />
     </symbol>
     <symbol id="i-fullscreen" viewBox="0 0 24 24">
       <path d="M8 3H5a2 2 0 0 0-2 2v3" />
@@ -376,7 +384,11 @@
     data-t-aria="info.aria">
     <div id="info-card">
       <div id="info-bar">
-        <span id="info-title"></span>
+        <div id="info-head">
+          <span id="info-title"></span>
+          <span id="info-user-rating" hidden></span>
+          <span id="info-favorite" hidden aria-hidden="true"><svg><use href="#i-heart" /></svg></span>
+        </div>
         <button id="info-close" aria-label="Cerrar" data-t-aria="ui.close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round" aria-hidden="true">

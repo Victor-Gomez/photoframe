@@ -34,6 +34,7 @@
     <table>
       <tr><td>{{ t('row.slideSeconds') }}</td><td>{{ prefs.slideSeconds }}</td></tr>
       <tr><td>{{ t('row.favoriteWeight') }}</td><td>×{{ prefs.favoriteWeight }}</td></tr>
+      <tr><td>{{ t('row.imageFit') }}</td><td>{{ t('imageFit.' + prefs.imageFit) }}</td></tr>
       <tr><td>{{ t('row.quiet') }}</td>
         <td>
           {%- if prefs.quietFrom and prefs.quietTo -%}

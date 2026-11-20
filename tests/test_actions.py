@@ -318,3 +318,37 @@ def test_the_favourite_count_follows_the_database(client, app):
     before = len(rules_of(app, "favorite"))
     data = post(client, "/api/favorite", id=pid, favorite=True).get_json()
     assert data["count"] == before + 1 == len(rules_of(app, "favorite"))
+
+
+def test_rating_saves_user_rating_in_db_and_memory(client, app):
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    res = client.post("/api/rating", json={"id": pid, "rating": 7})
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["rating"] == 7
+    assert app.library.rating_of(pid) == 7
+
+    info = client.get(f"/api/photo/{pid}").get_json()
+    assert info["rating"] == 7
+
+    row = app.db.borrow().execute(
+        "SELECT user_rating, user_rating_at FROM photo WHERE rel = ?",
+        ("Trip/Day1/beach.avif",),
+    ).fetchone()
+    assert row["user_rating"] == 7
+    assert row["user_rating_at"]
+
+
+def test_rating_rejects_out_of_range_values(client):
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    for bad in (-1, 11, "7", True):
+        res = client.post("/api/rating", json={"id": pid, "rating": bad})
+        assert res.status_code == 400
+
+
+def test_adding_favorite_also_sets_rating_to_10(client, app):
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    res = post(client, "/api/favorite", id=pid, favorite=True)
+    assert res.status_code == 200
+    assert res.get_json()["rating"] == 10
+    assert app.library.rating_of(pid) == 10

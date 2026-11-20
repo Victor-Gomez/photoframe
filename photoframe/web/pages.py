@@ -33,7 +33,8 @@ def blueprint(frame):
         # its own catalogue and re-does the page when the setting changes.
         return render_template(
             "frame.html", assets=asset_versions(),
-            lang=chosen(request.cookies.get(COOKIE), frame.prefs.language))
+            lang=chosen(request.cookies.get(COOKIE), frame.prefs.language),
+            imageFit=frame.prefs.image_fit)
 
     @bp.get("/api/assets")
     def asset_list():
@@ -74,8 +75,9 @@ def blueprint(frame):
 
         width = max(64, min(width, MAX_RENDER_EDGE))
         height = max(64, min(height, MAX_RENDER_EDGE))
+        fit = request.args.get("fit") == "contain"
         try:
-            data = frame.renderer.render(source, width, height)
+            data = frame.renderer.render(source, width, height, fit=fit)
         except Exception:
             log.exception("could not render %s", source)
             abort(415)

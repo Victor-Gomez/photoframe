@@ -22,6 +22,10 @@ DEFAULTS = {
     "slideSeconds": 60,
     "probeWorkers": 4,
     "favoriteWeight": 10,
+    "ratingFilter": "unscored",
+    "ratingThreshold": 5,
+    "folderFilter": "",
+    "imageFit": "cover",
     "jpegQuality": 85,
     "encodeThreads": 2,
     # Megabytes of rendered JPEGs held in memory. 0 turns the cache off entirely.
@@ -55,6 +59,14 @@ class Settings:
         self.log_level = self("logLevel", "LOG_LEVEL")
         self.probe_workers = self("probeWorkers", "PROBE_WORKERS", int)
         self.favorite_weight = max(1, self("favoriteWeight", "FAVORITE_WEIGHT", int))
+        self.rating_filter = self("ratingFilter", "RATING_FILTER").strip().lower()
+        if self.rating_filter not in ("all", "above", "unscored"):
+            self.rating_filter = "unscored"
+        self.rating_threshold = min(10, max(0, self("ratingThreshold", "RATING_THRESHOLD", int)))
+        self.folder_filter = self("folderFilter", "FOLDER_FILTER").strip().replace("\\", "/").strip("/")
+        self.image_fit = self("imageFit", "IMAGE_FIT").strip().lower()
+        if self.image_fit not in ("cover", "fit"):
+            self.image_fit = "cover"
         self.jpeg_quality = min(95, max(40, self("jpegQuality", "JPEG_QUALITY", int)))
         self.encode_threads = max(1, self("encodeThreads", "ENCODE_THREADS", int))
         self.cache_budget = max(0, self("renderCacheMB", "RENDER_CACHE_MB", int)) * 1024 * 1024

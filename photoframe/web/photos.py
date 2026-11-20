@@ -14,7 +14,9 @@ log = logging.getLogger(__name__)
 INFO_COLUMNS = (
     "taken", "tz", "make", "model", "lens", "aperture", "shutter", "iso",
     "focal_length", "focal_length_35", "compensation", "exposure_display",
-    "gps_lat", "gps_lon", "altitude", "width", "height", "size", "rating",
+    "gps_lat", "gps_lon", "altitude", "width", "height", "size", "rating", "user_rating",
+    "category", "score_overall", "score_aesthetic", "score_composition",
+    "score_tech_sharpness", "score_eye_sharpness",
     # Filled in by geocode.py from the `place` table, and by the Google Photos import.
     "location", "google_url",
 )
@@ -46,6 +48,7 @@ def blueprint(frame):
             # information the relative path carries, in a form a file manager accepts.
             fullPath=str(src),
             favorite=rules.favorite_check()(rel.as_posix().lower(), pid),
+            rating=library.rating_of(pid),
             tags=sorted(library.tags_of(pid)),
             ratio=library.ratio_of(pid),
         )
@@ -66,6 +69,7 @@ def blueprint(frame):
             "file": rel.rpartition("/")[2],
             "folder": rel.rpartition("/")[0],
             "fullPath": str(source),
+            "favorite": rules.favorite_check()(rel.lower(), pid),
             "tags": sorted(library.tags_of(pid)),
         }
         conn = db.borrow()
@@ -84,8 +88,8 @@ def blueprint(frame):
                     with db.lock:
                         people = conn.execute(
                             "SELECT DISTINCT p.name FROM face f "
-                            "JOIN cluster c ON c.id = f.cluster_id "
-                            "JOIN person p ON p.id = c.person_id "
+                            "LEFT JOIN cluster c ON c.id = f.cluster_id "
+                            "JOIN person p ON p.id = COALESCE(f.person_id, c.person_id) "
                             "WHERE f.rel = ? AND p.name IS NOT NULL ORDER BY p.name",
                             (rel,),
                         ).fetchall()

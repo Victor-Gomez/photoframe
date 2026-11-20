@@ -45,6 +45,8 @@
       pathNotCopied: 'No se ha podido copiar la ruta',
       favorited: 'Añadida a favoritas',
       unfavorited: 'Quitada de favoritas',
+      rated: score => `Valoración: ${score}`,
+      rateFailed: 'no se ha podido guardar la valoración',
       libraryRoot: 'raíz de la biblioteca',
       folderCount: (folder, total) => `${folder} · ${total} foto${total === 1 ? '' : 's'}`,
       folderFailed: 'no se ha podido cargar la carpeta',
@@ -60,6 +62,12 @@
       'row.altitude': 'Altitud',
       'row.people': 'Personas',
       'row.tags': 'Etiquetas',
+      'row.aiScore': 'Valoración IA',
+      'ai.overall': 'Global',
+      'ai.aesthetic': 'Estética',
+      'ai.composition': 'Composición',
+      'ai.sharpness': 'Nitidez',
+      'ai.eyes': 'Ojos',
       'row.path': 'Ruta',
       'ui.fullscreen': 'Pantalla completa',
       'ui.fullscreenAria': 'Alternar pantalla completa',
@@ -106,6 +114,8 @@
       pathNotCopied: 'Could not copy the path',
       favorited: 'Added to favourites',
       unfavorited: 'Removed from favourites',
+      rated: score => `Rating: ${score}`,
+      rateFailed: 'could not save rating',
       libraryRoot: 'the library root',
       folderCount: (folder, total) => `${folder} · ${total} photo${total === 1 ? '' : 's'}`,
       folderFailed: 'could not load the folder',
@@ -121,6 +131,12 @@
       'row.altitude': 'Altitude',
       'row.people': 'People',
       'row.tags': 'Tags',
+      'row.aiScore': 'AI rating',
+      'ai.overall': 'Overall',
+      'ai.aesthetic': 'Aesthetic',
+      'ai.composition': 'Composition',
+      'ai.sharpness': 'Sharpness',
+      'ai.eyes': 'Eyes',
       'row.path': 'Path',
       'ui.fullscreen': 'Fullscreen',
       'ui.fullscreenAria': 'Toggle fullscreen',
@@ -234,12 +250,14 @@
     return true;
   }
 
+  let imageFit = document.body.classList.contains('fit') ? 'fit' : 'cover';
+
   // Measured per request, not cached: entering or leaving fullscreen changes the
   // viewport without any reload, and the very next photo must arrive at the new size.
   const src = id => {
     if (originals) return `/img/${id}`;
     const { w, h } = panel();
-    return `/img/${id}?w=${w}&h=${h}`;
+    return `/img/${id}?w=${w}&h=${h}${imageFit === 'fit' ? '&fit=contain' : ''}`;
   };
 
   // The shape of this screen, as a number. The server sends back only photos shaped
@@ -644,12 +662,30 @@
   addEventListener('mousedown', wake, { capture: true });
   addEventListener('keydown', wake, { capture: true });
 
+  let activeRatingFilter = null;
+  let activeRatingThreshold = null;
+  let activeFolderFilter = null;
   async function readSettings() {
     try {
       const data = await (await fetch('/api/settings', { cache: 'no-store' })).json();
       quietFrom = data.quietFrom || '';
       quietTo = data.quietTo || '';
       if (data.slideSeconds) slide = data.slideSeconds * 1000;
+      if (activeRatingFilter !== null && (
+        data.ratingFilter !== activeRatingFilter ||
+        data.ratingThreshold !== activeRatingThreshold ||
+        data.folderFilter !== activeFolderFilter
+      )) {
+        // Rating or folder filter changed on /settings: force a fresh playlist on the next advance.
+        cursor = ids.length;
+      }
+      activeRatingFilter = data.ratingFilter;
+      activeRatingThreshold = data.ratingThreshold;
+      activeFolderFilter = data.folderFilter;
+      if (data.imageFit) {
+        imageFit = data.imageFit === 'fit' ? 'fit' : 'cover';
+        document.body.classList.toggle('fit', imageFit === 'fit');
+      }
       if (!deviceLang() && data.language && data.language !== lang && TEXT[data.language]) {
         lang = data.language;
         applyLanguage();
@@ -1024,7 +1060,7 @@
     say(t(await copyText(path) ? 'pathCopied' : 'pathNotCopied'));
   });
 
-  async function setFavorite(id, wanted) {
+  async function setFavorite(id, wanted, advance = false) {
     if (id === currentId) showHeart(wanted);  // respond to the tap immediately
     if (wanted) pulseHeart();
     try {
@@ -1042,9 +1078,26 @@
       // The same heart the button and the swipe pill use, filled or outline to match
       // which way the toggle went.
       say(t(wanted ? 'favorited' : 'unfavorited'), null, heartIcon(wanted));
+      if (advance) step('forward');
     } catch {
       say('no se ha podido contactar con el servidor');
       if (id === currentId) showHeart(!wanted);
+    }
+  }
+
+  async function setRating(id, score) {
+    try {
+      const res = await fetch('/api/rating', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, rating: score }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { say(data.error || t('rateFailed')); return; }
+      say(t('rated', score));
+      step('forward');
+    } catch {
+      say(t('offline'));
     }
   }
 
@@ -1432,6 +1485,19 @@
   const infoPanel = document.getElementById('info');
   const infoRows = document.getElementById('info-rows');
   const infoTitle = document.getElementById('info-title');
+  const infoUserRating = document.getElementById('info-user-rating');
+  const infoFavorite = document.getElementById('info-favorite');
+
+  // 0-10 red -> orange -> amber -> yellow-green -> lime -> green scale.
+  function scoreColor(score) {
+    const s = Math.max(0, Math.min(10, Number(score) || 0));
+    if (s < 2) return '#ef4444';
+    if (s < 4) return '#f97316';
+    if (s < 5.5) return '#eab308';
+    if (s < 7) return '#a3e635';
+    if (s < 8.5) return '#84cc16';
+    return '#22c55e';
+  }
   let infoOpen = false;
 
   /* What EXIF holds is an order code, not the name anyone knows the device by: Sony
@@ -1471,7 +1537,17 @@
     'iPhone 12 front camera 2.71mm f/2.2': 'Frontal',
   };
 
-  const lensName = (lens) => LENS_NAMES[lens] || lens;
+  function lensName(lens, camera, model) {
+    if (LENS_NAMES[lens]) return LENS_NAMES[lens];
+    let out = String(lens);
+    for (const prefix of [camera, model]) {
+      if (prefix && out.toLowerCase().startsWith(prefix.toLowerCase() + ' ')) {
+        out = out.slice(prefix.length + 1).trim();
+        break;
+      }
+    }
+    return out ? out[0].toUpperCase() + out.slice(1) : lens;
+  }
 
   const SONY_CODE = /^ILC[EA]-(\d+)([A-Z]*)(?:M(\d+))?$/;
   const MARKS = { 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII' };
@@ -1586,6 +1662,8 @@
     infoPanel.hidden = false;
     document.body.classList.add('gallery-open');  // same touch-action exception
     infoTitle.textContent = '…';
+    infoUserRating.hidden = true;
+    infoFavorite.hidden = true;
     infoRows.replaceChildren();
 
     let info;
@@ -1593,6 +1671,8 @@
       info = await (await fetch(`/api/info/${subject}`, { cache: 'no-store' })).json();
     } catch {
       infoTitle.textContent = '';
+      infoUserRating.hidden = true;
+      infoFavorite.hidden = true;
       const empty = document.createElement('div');
       empty.id = 'info-empty';
       empty.textContent = t('detailsFailed');
@@ -1602,6 +1682,17 @@
     if (!infoOpen) return;
 
     infoTitle.textContent = info.file || '';
+    infoFavorite.hidden = !info.favorite;
+    if (info.user_rating != null) {
+      const col = scoreColor(info.user_rating);
+      infoUserRating.replaceChildren(glyph('star'), document.createTextNode(`${info.user_rating} / 10`));
+      infoUserRating.style.setProperty('--rating-color', col);
+      infoUserRating.style.setProperty('--rating-bg', `${col}1f`);
+      infoUserRating.style.setProperty('--rating-border', `${col}4d`);
+      infoUserRating.hidden = false;
+    } else {
+      infoUserRating.hidden = true;
+    }
 
     // Explicit lines, grouped by what a person is actually asking when they open this:
     // when and how big, then what took it, then where, then who, then where it lives.
@@ -1629,7 +1720,7 @@
     const gear = line();
     const camera = cameraName(info.make, info.model);
     if (camera) addRow(t('row.camera'), camera, false, false, gear, 'camera');
-    if (info.lens) addRow(t('row.lens'), lensName(info.lens), false, false, gear, 'lens');
+    if (info.lens) addRow(t('row.lens'), lensName(info.lens, camera, info.model), false, false, gear, 'lens');
 
     // Focal length, aperture, shutter and ISO in one field: they are the settings of a
     // single shot and are read together, the way any camera displays them. Whichever
@@ -1677,6 +1768,53 @@
     if (info.people && info.people.length) addRow(t('row.people'), info.people.join(', '), false, false, who, 'user');
     if (info.tags && info.tags.length) addRow(t('row.tags'), info.tags.join(', '), false, false, who, 'tag');
     commit(who);
+
+    // 4b — AI quality metrics (borderless color-coded bars).
+    const aiDefs = [
+      ['score_overall', t('ai.overall')],
+      ['score_aesthetic', t('ai.aesthetic')],
+      ['score_composition', t('ai.composition')],
+      ['score_tech_sharpness', t('ai.sharpness')],
+      ['score_eye_sharpness', t('ai.eyes')],
+    ].filter(([key, label]) => info[key] != null && (key !== 'score_eye_sharpness' || info[key] > 0));
+    if (aiDefs.length) {
+      const aiLine = line();
+      const field = document.createElement('div');
+      field.className = 'field wide';
+      const dt = document.createElement('dt');
+      dt.append(glyph('sparkles'), document.createTextNode(t('row.aiScore')));
+      if (info.category) {
+        const badge = document.createElement('span');
+        badge.className = 'info-cat';
+        badge.textContent = String(info.category).toUpperCase();
+        dt.append(badge);
+      }
+      const dd = document.createElement('dd');
+      dd.className = 'ai-metrics';
+      for (const [key, label] of aiDefs) {
+        const val = Number(info[key]);
+        const metric = document.createElement('div');
+        metric.className = 'ai-metric';
+        const lbl = document.createElement('span');
+        lbl.className = 'ai-label';
+        lbl.textContent = label;
+        const num = document.createElement('span');
+        num.className = 'ai-val';
+        num.textContent = val.toFixed(1);
+        const bar = document.createElement('div');
+        bar.className = 'ai-bar';
+        const fill = document.createElement('div');
+        fill.className = 'ai-fill';
+        fill.style.width = `${Math.max(0, Math.min(100, val * 10))}%`;
+        fill.style.background = scoreColor(val);
+        bar.append(fill);
+        metric.append(lbl, num, bar);
+        dd.append(metric);
+      }
+      field.append(dt, dd);
+      aiLine.append(field);
+      commit(aiLine);
+    }
 
     // 5 — where it lives on disk.
     const path = line();
@@ -2102,9 +2240,18 @@
   }, { passive: true });
 
   // The four arrow keys mirror the four swipes: left and right move, up favourites,
-  // down hides. Handy with a keyboard or a remote, and the same actions either way.
+  // down hides. Number keys 0-9 save a curation rating; Enter rates 10 and favourites.
   addEventListener('keydown', event => {
     if (menuOpen || galleryOpen || infoOpen) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'Enter') {
+      if (currentId) setFavorite(currentId, true, true);
+      return;
+    }
+    if (event.key >= '0' && event.key <= '9') {
+      if (currentId) setRating(currentId, Number(event.key));
+      return;
+    }
     if (!event.key.startsWith('Arrow') && event.key !== ' ') return;
     switch (event.key) {
       case 'ArrowLeft': return step('back');

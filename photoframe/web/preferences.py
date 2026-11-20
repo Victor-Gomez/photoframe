@@ -9,7 +9,7 @@ import logging
 from flask import Blueprint, jsonify, render_template, request
 
 from .. import i18n
-from ..preferences import LOG_LEVELS
+from ..preferences import IMAGE_FITS, LOG_LEVELS, RATING_FILTERS
 
 log = logging.getLogger(__name__)
 
@@ -22,10 +22,16 @@ def blueprint(frame):
     def settings_page():
         language = i18n.chosen(request.cookies.get(i18n.COOKIE), prefs.language)
         t = i18n.translator(language)
+        folders = sorted({
+            rel.partition("/")[0]
+            for rel in frame.library.rel_true_map().values()
+            if "/" in rel
+        }, key=str.casefold)
         return render_template(
             "settings.html",
             tab="settings",
             t=t, lang=language, languages=i18n.NAMES, logLevels=LOG_LEVELS,
+            ratingFilters=RATING_FILTERS, imageFits=IMAGE_FITS, folders=folders,
             settings=prefs.as_dict(), db=frame.db.state(),
             # Empty means this device has not asked for one and follows the frame.
             deviceLanguage=request.cookies.get(i18n.COOKIE, ""),

@@ -146,3 +146,50 @@ def test_an_empty_library_still_reports_empty_once_indexed(make_app):
     body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=100").get_json()
     assert body["count"] == 0
     assert body["indexing"] is False
+
+
+def test_rating_filter_modes_filter_playlist(make_app):
+    app = make_app()
+    client = app.app.test_client()
+    p_unscored = photo_id_of("wide.avif")
+    p_low = photo_id_of("Trip/Day1/beach.avif")
+    p_high = photo_id_of("Trip/Day1/tower.avif")
+
+    assert client.post("/api/rating", json={"id": p_low, "rating": 3}).status_code == 200
+    assert client.post("/api/rating", json={"id": p_high, "rating": 8}).status_code == 200
+
+    # Default is unscored: excludes both rated photos.
+    unscored_ids = set(client.get("/api/playlist").get_json()["ids"])
+    assert p_unscored in unscored_ids
+    assert p_low not in unscored_ids
+    assert p_high not in unscored_ids
+
+    # Above threshold 5: only p_high.
+    assert client.post("/api/settings", json={"ratingFilter": "above", "ratingThreshold": 5}).status_code == 200
+    above_ids = set(client.get("/api/playlist").get_json()["ids"])
+    assert above_ids == {p_high}
+
+    # All: includes all three.
+    assert client.post("/api/settings", json={"ratingFilter": "all"}).status_code == 200
+    all_ids = set(client.get("/api/playlist").get_json()["ids"])
+    assert {p_unscored, p_low, p_high} <= all_ids
+
+
+def test_folder_filter_restricts_playlist_to_matching_folder(make_app):
+    app = make_app()
+    client = app.app.test_client()
+    p_day1_a = photo_id_of("Trip/Day1/beach.avif")
+    p_day1_b = photo_id_of("Trip/Day1/tower.avif")
+    p_day2 = photo_id_of("Trip/Day2/square.avif")
+    p_root = photo_id_of("wide.avif")
+
+    assert client.post("/api/settings", json={"folderFilter": "Trip/Day1/"}).status_code == 200
+    filtered = set(client.get("/api/playlist").get_json()["ids"])
+    assert filtered == {p_day1_a, p_day1_b}
+    assert p_day2 not in filtered
+    assert p_root not in filtered
+
+    # Blank clears the filter.
+    assert client.post("/api/settings", json={"folderFilter": ""}).status_code == 200
+    unfiltered = set(client.get("/api/playlist").get_json()["ids"])
+    assert {p_day1_a, p_day1_b, p_day2, p_root} <= unfiltered

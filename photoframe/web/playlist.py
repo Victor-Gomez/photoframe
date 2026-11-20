@@ -100,8 +100,23 @@ def blueprint(frame):
             matched_on = "nothing yet (still indexing)"
 
         ids = [pid for pid, _ in items]
-        favorite = rules.favorite_check()   # one snapshot for the whole pass
         relatives = library.rel_lower_map()
+        folder_filter = prefs.folder_filter.lower()
+        if folder_filter:
+            prefix = folder_filter + "/"
+            ids = [
+                pid for pid in ids
+                if (rel := relatives.get(pid, "")) == folder_filter or rel.startswith(prefix)
+            ]
+        rfilter = prefs.rating_filter
+        if rfilter == "unscored":
+            ids = [pid for pid in ids if library.rating_of(pid) is None]
+        elif rfilter == "above":
+            thresh = prefs.rating_threshold
+            ids = [pid for pid in ids
+                   if (r := library.rating_of(pid)) is not None and r >= thresh]
+
+        favorite = rules.favorite_check()   # one snapshot for the whole pass
         favorites = {pid for pid in ids if favorite(relatives.get(pid, ""), pid)}
         ids = weighted_shuffle(ids, favorites, prefs.favorite_weight)
 
@@ -109,8 +124,11 @@ def blueprint(frame):
         library.passes.add(token, ids)
         return page_of(
             token, ids, offset=0, limit=limit,
-            photos=len(items),
+            photos=len(ids),
             favorites=len(favorites),
+            ratingFilter=rfilter,
+            ratingThreshold=prefs.rating_threshold,
+            folderFilter=prefs.folder_filter,
             ratio=screen or None,
             matchedOn=matched_on,
             orientation=want if want in ORIENTATIONS else "any",

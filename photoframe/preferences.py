@@ -23,7 +23,14 @@ HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 
 QUIET = ("quietFrom", "quietTo")
 LOG_LEVELS = ("off", "error", "info")
-CHOICES = {"language": LANGUAGES, "logLevel": LOG_LEVELS}
+RATING_FILTERS = ("all", "above", "unscored")
+IMAGE_FITS = ("cover", "fit")
+CHOICES = {
+    "language": LANGUAGES,
+    "logLevel": LOG_LEVELS,
+    "ratingFilter": RATING_FILTERS,
+    "imageFit": IMAGE_FITS,
+}
 
 
 def clean(name: str, raw, default):
@@ -38,6 +45,8 @@ def clean(name: str, raw, default):
         if text and not HHMM.fullmatch(text):
             raise Invalid("error.time", name=name)
         return text
+    if name == "folderFilter":
+        return str(raw or "").strip().replace("\\", "/").strip("/").removeprefix("./")
     try:
         number = int(raw)
     except (TypeError, ValueError):
@@ -46,6 +55,8 @@ def clean(name: str, raw, default):
         return max(3, min(3600, number))
     if name == "favoriteWeight":
         return max(1, min(100, number))
+    if name == "ratingThreshold":
+        return max(0, min(10, number))
     return default
 
 
@@ -82,6 +93,10 @@ class Preferences:
         return {
             "slideSeconds": self.settings.slide_seconds,
             "favoriteWeight": self.settings.favorite_weight,
+            "ratingFilter": self.settings.rating_filter,
+            "ratingThreshold": self.settings.rating_threshold,
+            "folderFilter": self.settings.folder_filter,
+            "imageFit": self.settings.image_fit,
             "quietFrom": "",
             "quietTo": "",
             "language": self.settings.language,
@@ -128,6 +143,22 @@ class Preferences:
     @property
     def favorite_weight(self) -> int:
         return self["favoriteWeight"]
+
+    @property
+    def rating_filter(self) -> str:
+        return self["ratingFilter"]
+
+    @property
+    def rating_threshold(self) -> int:
+        return self["ratingThreshold"]
+
+    @property
+    def folder_filter(self) -> str:
+        return self["folderFilter"]
+
+    @property
+    def image_fit(self) -> str:
+        return self["imageFit"]
 
     @property
     def language(self) -> str:

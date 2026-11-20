@@ -188,3 +188,30 @@ def test_both_tabs_wear_the_frames_own_icon(app, client):
         assert 'href="data:image/svg+xml,<svg' in page
         assert "data:," not in page
         assert f"Marco de fotos · {title}" in page     # the shared head still titles each tab
+
+
+def test_image_fit_defaults_to_cover_and_persists_fit(app, client):
+    assert client.get("/api/settings").get_json()["imageFit"] == "cover"
+    assert 'class="fit"' not in client.get("/").get_data(as_text=True)
+
+    assert client.post("/api/settings", json={"imageFit": "stretch"}).status_code == 400
+    saved = client.post("/api/settings", json={"imageFit": "fit"}).get_json()
+    assert saved["imageFit"] == "fit"
+    assert stored(app, "imageFit") == "fit"
+    assert 'class="fit"' in client.get("/").get_data(as_text=True)
+
+
+def test_fit_render_keeps_aspect_ratio_without_cropping(app, client):
+    import io
+    from PIL import Image
+
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    # Ask for a tall box (200x400) for a landscape photo: cover crops to 200x400, fit shrinks to width 200.
+    cover_resp = client.get(f"/img/{pid}?w=200&h=400")
+    fit_resp = client.get(f"/img/{pid}?w=200&h=400&fit=contain")
+    assert cover_resp.status_code == 200 and fit_resp.status_code == 200
+
+    with Image.open(io.BytesIO(cover_resp.data)) as im:
+        assert im.size == (200, 400)
+    with Image.open(io.BytesIO(fit_resp.data)) as im:
+        assert im.width == 200 and im.height < 400

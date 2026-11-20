@@ -90,6 +90,7 @@ class Library:
         self._shape_lock = threading.Lock()
         self._ratio: dict[str, float] = {}
         self._tags: dict[str, tuple[str, ...]] = {}
+        self._ratings: dict[str, int] = {}
         self._probe_lock = threading.Lock()   # whole passes, not individual photos
         self.probe_done = threading.Event()
 
@@ -130,6 +131,17 @@ class Library:
         with self._shape_lock:
             return self._tags.get(pid, ())
 
+    def rating_of(self, pid: str) -> int | None:
+        with self._shape_lock:
+            return self._ratings.get(pid)
+
+    def set_rating(self, pid: str, rating: int | None) -> None:
+        with self._shape_lock:
+            if rating is None:
+                self._ratings.pop(pid, None)
+            else:
+                self._ratings[pid] = int(rating)
+
     def set_tags(self, pid: str, tags) -> None:
         """Used where a photo's tags are known without reading it — and by the tests."""
         with self._shape_lock:
@@ -169,7 +181,7 @@ class Library:
         if conn is None:
             return 0
         with self.db.lock:
-            rows = conn.execute("SELECT rel, ratio FROM photo WHERE rel IS NOT NULL").fetchall()
+            rows = conn.execute("SELECT rel, ratio, user_rating FROM photo WHERE rel IS NOT NULL").fetchall()
             tag_rows = conn.execute("SELECT rel, tag FROM photo_tag").fetchall()
         if not rows:
             return 0
@@ -178,6 +190,7 @@ class Library:
         relatives: dict[str, str] = {}
         true_paths: dict[str, str] = {}
         ratios: dict[str, float] = {}
+        ratings: dict[str, int] = {}
         for row in rows:
             rel = row["rel"]
             lower = rel.lower()
@@ -193,6 +206,8 @@ class Library:
             true_paths[pid] = rel
             if isinstance(row["ratio"], (int, float)) and row["ratio"] > 0:
                 ratios[pid] = float(row["ratio"])
+            if row["user_rating"] is not None:
+                ratings[pid] = int(row["user_rating"])
 
         tags: dict[str, tuple[str, ...]] = {}
         for row in tag_rows:
@@ -204,6 +219,7 @@ class Library:
         with self._shape_lock:
             self._ratio = ratios
             self._tags = tags
+            self._ratings = ratings
         self.probe_done.set()      # nothing left to probe: the database already knows
         self.passes.forget()
         log.info("loaded %d photos from %s (%d with a ratio, %d tagged)",

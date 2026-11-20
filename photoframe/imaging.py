@@ -93,13 +93,13 @@ class RenderCache:
             return self._bytes
 
     @staticmethod
-    def key(source: Path, width: int, height: int):
+    def key(source: Path, width: int, height: int, fit: bool = False):
         """Includes the file's own stamp, so a photo replaced by the sync is never stale."""
         try:
             stat = source.stat()
         except OSError:
             return None
-        return (str(source), width, height, stat.st_mtime_ns, stat.st_size)
+        return (str(source), width, height, bool(fit), stat.st_mtime_ns, stat.st_size)
 
     def get(self, key) -> bytes | None:
         if key is None or not self.budget:
@@ -184,27 +184,29 @@ class Renderer:
         self._times: list[float] = []
         self._times_lock = threading.Lock()
 
-    def render(self, source: Path, width: int, height: int) -> bytes:
+    def render(self, source: Path, width: int, height: int, fit: bool = False) -> bytes:
         """The cached JPEG if there is one, otherwise a fresh one, remembered on the way out."""
         # Before the semaphore: a hit costs nothing and must not queue behind real renders.
-        key = RenderCache.key(source, width, height)
+        key = RenderCache.key(source, width, height, fit=fit)
         data = self.cache.get(key)
         if data is not None:
             return data
         with self.slots:
             data = self.cache.get(key)   # another thread may have rendered it while we queued
             if data is None:
-                data = self._encode(source, width, height).getvalue()
+                data = self._encode(source, width, height, fit=fit).getvalue()
                 self.cache.put(key, data)
         return data
 
-    def _encode(self, source: Path, width: int, height: int) -> io.BytesIO:
+    def _encode(self, source: Path, width: int, height: int, fit: bool = False) -> io.BytesIO:
         started = time.perf_counter()
-        result = self._with_pillow(source, width, height)
+        result = self._with_pillow(source, width, height, fit=fit)
         self._record((time.perf_counter() - started) * 1000)
         return result
 
-    def _fit_and_encode(self, im: Image.Image, width: int, height: int) -> io.BytesIO:
+    def _fit_and_encode(
+        self, im: Image.Image, width: int, height: int, fit: bool = False
+    ) -> io.BytesIO:
         # The orientation lives in EXIF and is lost on re-encode, so apply it first.
         im = ImageOps.exif_transpose(im)
         # LANCZOS over a full 24 MP frame is the render's slowest step on the wall box
@@ -214,17 +216,20 @@ class Renderer:
         factor = max(1, min(im.width // width, im.height // height))
         if factor > 1:
             im = im.reduce(factor)
-        fitted = ImageOps.fit(im, (width, height), method=Image.LANCZOS, centering=(0.5, 0.5))
+        if fit:
+            fitted = ImageOps.contain(im, (width, height), method=Image.LANCZOS)
+        else:
+            fitted = ImageOps.fit(im, (width, height), method=Image.LANCZOS, centering=(0.5, 0.5))
         buffer = io.BytesIO()
         fitted.convert("RGB").save(
             buffer, "JPEG", quality=self.quality, optimize=True, progressive=True)
         buffer.seek(0)
         return buffer
 
-    def _with_pillow(self, source: Path, width: int, height: int) -> io.BytesIO:
+    def _with_pillow(self, source: Path, width: int, height: int, fit: bool = False) -> io.BytesIO:
         with Image.open(source) as im:
             im.draft("RGB", (width, height))  # reduced-scale decode where the format allows
-            return self._fit_and_encode(im, width, height)
+            return self._fit_and_encode(im, width, height, fit=fit)
 
     def _record(self, milliseconds: float) -> None:
         with self._times_lock:

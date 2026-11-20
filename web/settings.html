@@ -29,6 +29,49 @@
       </div>
 
       <div class="field">
+        <label for="ratingFilter">{{ t('row.ratingFilter') }}</label>
+        <div class="controls">
+          <select id="ratingFilter">
+            {% for opt in ratingFilters %}
+            <option value="{{ opt }}" {{ "selected" if settings.ratingFilter == opt }}>{{ t('ratingFilter.' + opt) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ratingThreshold">{{ t('row.ratingThreshold') }}
+          <small>{{ t('hint.ratingThreshold') }}</small></label>
+        <div class="controls">
+          <input type="number" id="ratingThreshold" min="0" max="10" value="{{ settings.ratingThreshold }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="folderFilter">{{ t('row.folderFilter') }}
+          <small>{{ t('hint.folderFilter') }}</small></label>
+        <div class="controls">
+          <input type="text" id="folderFilter" list="folderList" placeholder="{{ t('folderFilter.all') }}" value="{{ settings.folderFilter }}">
+          <datalist id="folderList">
+            {% for folder in folders %}
+            <option value="{{ folder }}">
+            {% endfor %}
+          </datalist>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="imageFit">{{ t('row.imageFit') }}</label>
+        <div class="controls">
+          <select id="imageFit">
+            {% for opt in imageFits %}
+            <option value="{{ opt }}" {{ "selected" if settings.imageFit == opt }}>{{ t('imageFit.' + opt) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
         <label>{{ t('row.quiet') }}
           <small>{{ t('hint.quiet') }}</small></label>
         <div class="controls">
@@ -133,6 +176,10 @@
         // Echo what was stored rather than what was typed: the server clamps.
         $('slideSeconds').value = body.slideSeconds;
         $('favoriteWeight').value = body.favoriteWeight;
+        $('ratingFilter').value = body.ratingFilter;
+        $('ratingThreshold').value = body.ratingThreshold;
+        $('folderFilter').value = body.folderFilter;
+        $('imageFit').value = body.imageFit;
         // The page is rendered by the server, so its own language changes on reload — and
         // the page coming back in the new language is the acknowledgement.
         if ('language' in patch && body.language !== TEXT.language && !TEXT.deviceLanguage) {
@@ -148,6 +195,10 @@
 
     $('slideSeconds').addEventListener('change', () => save({ slideSeconds: +$('slideSeconds').value }));
     $('favoriteWeight').addEventListener('change', () => save({ favoriteWeight: +$('favoriteWeight').value }));
+    $('ratingFilter').addEventListener('change', () => save({ ratingFilter: $('ratingFilter').value }));
+    $('ratingThreshold').addEventListener('change', () => save({ ratingThreshold: +$('ratingThreshold').value }));
+    $('folderFilter').addEventListener('change', () => save({ folderFilter: $('folderFilter').value }));
+    $('imageFit').addEventListener('change', () => save({ imageFit: $('imageFit').value }));
     $('language').addEventListener('change', () => save({ language: $('language').value }));
     $('logLevel').addEventListener('change', () => save({ logLevel: $('logLevel').value }));
 

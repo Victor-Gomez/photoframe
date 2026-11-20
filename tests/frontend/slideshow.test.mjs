@@ -235,3 +235,16 @@ test('every row of the menu carries its icon', async () => {
     }
   } finally { frame.close(); }
 });
+
+
+test('imageFit applies the fit class and requests uncropped renders', async () => {
+  const frame = await boot({ imageFit: 'fit' });
+  try {
+    await frame.tick(300);   // allow initial settings poll to apply
+    assert.ok(frame.window.document.body.classList.contains('fit'));
+    frame.key('ArrowRight');
+    await frame.tick(SETTLE);
+    assert.ok(frame.requested.some(url => url.includes('fit=contain')),
+      `expected a fit=contain image request, got ${frame.requested.join(', ')}`);
+  } finally { frame.close(); }
+});

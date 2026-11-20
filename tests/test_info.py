@@ -94,6 +94,19 @@ def test_named_people_are_listed(app, client, exif):
     assert info["people"] == ["Trini"]
 
 
+def test_named_people_via_person_id_are_listed(app, client, exif):
+    """Modern schema (v14): faces can link directly to person_id without a cluster."""
+    with app.db.lock:
+        app.db.borrow().execute("INSERT INTO person (id, name) VALUES ('p2', 'Victor')")
+        app.db.borrow().execute(
+            "INSERT INTO face (rel, idx, person_id) VALUES (?, 1, 'p2')", (exif,)
+        )
+        app.db.borrow().commit()
+
+    info = client.get(f"/api/info/{photo_id_of(exif)}").get_json()
+    assert "Victor" in info["people"]
+
+
 def test_the_resolved_place_and_google_link_are_returned(app, client, exif):
     """geocode.py fills `location`; the Google Photos import fills `google_url`."""
     with app.db.lock:

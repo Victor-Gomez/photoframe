@@ -5,6 +5,7 @@ is never moved, renamed or deleted.
 """
 
 import logging
+from datetime import datetime
 from pathlib import PurePosixPath
 
 from flask import Blueprint, abort, jsonify, request
@@ -109,6 +110,17 @@ def blueprint(frame):
             if not rules.favorite_check()(entry.lower(), pid):
                 rules.add("favorites", entry)
             covered_by = "rule" if not rules.matcher("favorites")(entry.lower()) else "name"
+            conn = frame.db.require()
+            now = datetime.now().astimezone().isoformat(timespec="seconds")
+            with frame.db.lock:
+                conn.execute(
+                    "INSERT INTO photo (rel, user_rating, user_rating_at) VALUES (?, 10, ?) "
+                    "ON CONFLICT(rel) DO UPDATE SET user_rating = 10, "
+                    "user_rating_at = excluded.user_rating_at",
+                    (entry, now),
+                )
+                conn.commit()
+            library.set_rating(pid, 10)
         else:
             rules.remove("favorites", entry)
             covered_by = "name"
@@ -117,6 +129,34 @@ def blueprint(frame):
                 covered_by = "rule"
 
         return jsonify(entry=entry, favorite=wanted, coveredBy=covered_by,
-                       count=rules.favorite_count())
+                       rating=library.rating_of(pid), count=rules.favorite_count())
+
+    @bp.post("/api/rating")
+    def rating_set():
+        """Save a 0-10 user curation rating for the current photo into photos.db."""
+        data = request.get_json(silent=True) or {}
+        pid = data.get("id", "")
+        rel = PurePosixPath(indexed_photo(data).relative_to(library.root).as_posix()).as_posix()
+        raw_rating = data.get("rating")
+        if raw_rating is None:
+            rating = None
+        else:
+            if isinstance(raw_rating, bool) or not isinstance(raw_rating, int) or not (0 <= raw_rating <= 10):
+                return jsonify(error=text()("error.rating")), 400
+            rating = raw_rating
+
+        conn = frame.db.require()
+        now = datetime.now().astimezone().isoformat(timespec="seconds") if rating is not None else None
+        with frame.db.lock:
+            conn.execute(
+                "INSERT INTO photo (rel, user_rating, user_rating_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(rel) DO UPDATE SET user_rating = excluded.user_rating, "
+                "user_rating_at = excluded.user_rating_at",
+                (rel, rating, now),
+            )
+            conn.commit()
+        library.set_rating(pid, rating)
+        log.info("rating %s -> %s by %s", rel, rating, request.remote_addr)
+        return jsonify(id=pid, rating=rating, updatedAt=now)
 
     return bp
