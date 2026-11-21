@@ -9,6 +9,7 @@ the box serving it, so they live in the database and follow it between machines.
 import logging
 import re
 import threading
+import uuid
 
 import store
 
@@ -19,9 +20,47 @@ log = logging.getLogger(__name__)
 
 # The meta table is shared with the library tools, so the frame's keys say whose they are.
 PREFIX = "frame."
+DEVICE_PREFIX = PREFIX + "device."
+DEVICE_COOKIE = "frame_device"
+DEVICE_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
 HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 
+DEVICE_KEYS = frozenset({
+    "weightByRating",
+    "showRating",
+    "ratingFilter",
+    "ratingThresholdEnabled",
+    "ratingThreshold",
+    "folderFilter",
+    "imageFit",
+})
+
+
+def device_id_from(request) -> str | None:
+    """Return the validated device ID from the request cookie, or None."""
+    raw = request.cookies.get(DEVICE_COOKIE, "")
+    return raw if DEVICE_ID_RE.fullmatch(raw) else None
+
+
+def resolve_device(request) -> tuple[str, bool]:
+    """Return (device_id, is_new), minting a fresh hex UUID when absent or invalid."""
+    existing = device_id_from(request)
+    if existing:
+        return existing, False
+    return uuid.uuid4().hex, True
+
+
+def set_device_cookie(response, device_id: str) -> None:
+    response.set_cookie(
+        DEVICE_COOKIE,
+        device_id,
+        max_age=10 * 365 * 86400,
+        samesite="Lax",
+        path="/",
+    )
+
 QUIET = ("quietFrom", "quietTo")
+BOOLEANS = ("weightByRating", "showRating", "ratingThresholdEnabled")
 LOG_LEVELS = ("off", "error", "info")
 RATING_FILTERS = ("all", "above", "unscored")
 IMAGE_FITS = ("cover", "fit")
@@ -45,6 +84,17 @@ def clean(name: str, raw, default):
         if text and not HHMM.fullmatch(text):
             raise Invalid("error.time", name=name)
         return text
+    if name in BOOLEANS:
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return bool(raw)
+        text = str(raw).strip().lower()
+        if text in ("1", "true", "yes", "on"):
+            return True
+        if text in ("0", "false", "no", "off", ""):
+            return False
+        raise Invalid("error.choice", name=name, value=str(raw))
     if name == "folderFilter":
         return str(raw or "").strip().replace("\\", "/").strip("/").removeprefix("./")
     try:
@@ -53,8 +103,6 @@ def clean(name: str, raw, default):
         raise Invalid("error.number", name=name) from None
     if name == "slideSeconds":
         return max(3, min(3600, number))
-    if name == "favoriteWeight":
-        return max(1, min(100, number))
     if name == "ratingThreshold":
         return max(0, min(10, number))
     return default
@@ -87,13 +135,16 @@ class Preferences:
         self.settings = settings
         self._lock = threading.RLock()
         self._values: dict = self.defaults()
+        self._devices: dict[str, dict] = {}
         self.reload()
 
     def defaults(self) -> dict:
         return {
             "slideSeconds": self.settings.slide_seconds,
-            "favoriteWeight": self.settings.favorite_weight,
+            "weightByRating": self.settings.weight_by_rating,
+            "showRating": self.settings.show_rating,
             "ratingFilter": self.settings.rating_filter,
+            "ratingThresholdEnabled": self.settings.rating_threshold_enabled,
             "ratingThreshold": self.settings.rating_threshold,
             "folderFilter": self.settings.folder_filter,
             "imageFit": self.settings.image_fit,
@@ -112,6 +163,10 @@ class Preferences:
         defaults = self.defaults()
         with self.db.lock:
             stored = {name: store.meta_get(conn, PREFIX + name) for name in defaults}
+            device_rows = conn.execute(
+                "SELECT key, value FROM meta WHERE key LIKE ?",
+                (DEVICE_PREFIX + "%",),
+            ).fetchall()
 
         values = {}
         for name, default in defaults.items():
@@ -125,12 +180,31 @@ class Preferences:
                 # row would be worse than falling back to what config.json says.
                 log.warning("ignoring %s in %s (%s)", PREFIX + name, self.db.path.name, exc)
                 values[name] = default
+
+        devices: dict[str, dict] = {}
+        for row in device_rows:
+            rest = row["key"][len(DEVICE_PREFIX):]
+            dev_id, sep, name = rest.partition(".")
+            if not sep or name not in DEVICE_KEYS or not DEVICE_ID_RE.fullmatch(dev_id):
+                continue
+            try:
+                devices.setdefault(dev_id, {})[name] = clean(name, row["value"], defaults[name])
+            except Invalid as exc:
+                log.warning("ignoring %s in %s (%s)", row["key"], self.db.path.name, exc)
+
         with self._lock:
             self._values = values
+            self._devices = devices
 
     def as_dict(self) -> dict:
         with self._lock:
             return dict(self._values)
+
+    def for_device(self, device_id: str | None) -> dict:
+        with self._lock:
+            if not device_id or device_id not in self._devices:
+                return dict(self._values)
+            return {**self._values, **self._devices[device_id]}
 
     def __getitem__(self, name: str):
         with self._lock:
@@ -141,12 +215,20 @@ class Preferences:
         return self["slideSeconds"]
 
     @property
-    def favorite_weight(self) -> int:
-        return self["favoriteWeight"]
+    def weight_by_rating(self) -> bool:
+        return self["weightByRating"]
+
+    @property
+    def show_rating(self) -> bool:
+        return self["showRating"]
 
     @property
     def rating_filter(self) -> str:
         return self["ratingFilter"]
+
+    @property
+    def rating_threshold_enabled(self) -> bool:
+        return self["ratingThresholdEnabled"]
 
     @property
     def rating_threshold(self) -> int:
@@ -168,11 +250,11 @@ class Preferences:
     def quiet_hours(self) -> tuple[str, str]:
         return self["quietFrom"], self["quietTo"]
 
-    def update(self, incoming: dict) -> dict:
+    def update(self, incoming: dict, device_id: str | None = None) -> dict:
         """Write what someone changed, and nothing else.
 
-        An unknown key is refused rather than dropped: a settings form that silently
-        ignores half of what it sent is worse than one that says so.
+        Per-device keys are scoped to `device_id` when provided; global keys apply to all
+        devices. An unknown key is refused rather than dropped.
         """
         conn = self.db.require()          # 503 while the database is on loan
         defaults = self.defaults()
@@ -181,14 +263,19 @@ class Preferences:
             raise Invalid("error.unknownSetting", names=", ".join(unknown))
 
         cleaned = {name: clean(name, value, defaults[name]) for name, value in incoming.items()}
-        merged = {**self.as_dict(), **cleaned}
+        merged = {**self.for_device(device_id), **cleaned}
         if bool(merged["quietFrom"]) != bool(merged["quietTo"]):
             raise Invalid("error.quietEnds")
 
         with self.db.lock:
             for name, value in cleaned.items():
-                store.meta_set(conn, PREFIX + name, str(value))
+                key = (
+                    f"{DEVICE_PREFIX}{device_id}.{name}"
+                    if device_id and name in DEVICE_KEYS
+                    else PREFIX + name
+                )
+                store.meta_set(conn, key, str(value))
             conn.commit()
-        log.info("settings changed: %s", cleaned)
+        log.info("settings changed (device=%s): %s", device_id or "global", cleaned)
         self.reload()
-        return self.as_dict()
+        return self.for_device(device_id)

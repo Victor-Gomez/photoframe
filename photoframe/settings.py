@@ -21,8 +21,10 @@ DEFAULTS = {
     "language": "es",
     "slideSeconds": 60,
     "probeWorkers": 4,
-    "favoriteWeight": 10,
+    "weightByRating": False,
+    "showRating": False,
     "ratingFilter": "unscored",
+    "ratingThresholdEnabled": False,
     "ratingThreshold": 5,
     "folderFilter": "",
     "imageFit": "cover",
@@ -58,10 +60,12 @@ class Settings:
         self.language = self("language", "LANGUAGE")
         self.log_level = self("logLevel", "LOG_LEVEL")
         self.probe_workers = self("probeWorkers", "PROBE_WORKERS", int)
-        self.favorite_weight = max(1, self("favoriteWeight", "FAVORITE_WEIGHT", int))
+        self.weight_by_rating = self._bool("weightByRating", "WEIGHT_BY_RATING")
+        self.show_rating = self._bool("showRating", "SHOW_RATING")
         self.rating_filter = self("ratingFilter", "RATING_FILTER").strip().lower()
         if self.rating_filter not in ("all", "above", "unscored"):
             self.rating_filter = "unscored"
+        self.rating_threshold_enabled = self._bool("ratingThresholdEnabled", "RATING_THRESHOLD_ENABLED")
         self.rating_threshold = min(10, max(0, self("ratingThreshold", "RATING_THRESHOLD", int)))
         self.folder_filter = self("folderFilter", "FOLDER_FILTER").strip().replace("\\", "/").strip("/")
         self.image_fit = self("imageFit", "IMAGE_FIT").strip().lower()
@@ -74,6 +78,15 @@ class Settings:
     def __call__(self, key: str, env: str, cast=str):
         raw = os.environ.get(env)
         return cast(raw) if raw not in (None, "") else cast(self.values.get(key, DEFAULTS[key]))
+
+    def _bool(self, key: str, env: str) -> bool:
+        raw = os.environ.get(env)
+        val = raw if raw not in (None, "") else self.values.get(key, DEFAULTS[key])
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return bool(val)
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
 
     def reload(self) -> None:
         """Re-read the file, so a hand edit is picked up without a restart."""

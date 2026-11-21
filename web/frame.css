@@ -111,6 +111,10 @@ body.fit .layer img {
   object-fit: contain;
 }
 
+body.fit.keypad-open .layer img {
+  object-position: top center;
+}
+
 #hud {
   position: absolute;
   /* Only the path is interactive; the clock must not swallow taps meant for the photo. */
@@ -998,7 +1002,8 @@ body.asleep #night { opacity: 1; }
   text-overflow: ellipsis;
 }
 
-#info-user-rating {
+#info-user-rating,
+#corner-rating {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -1006,22 +1011,90 @@ body.asleep #night { opacity: 1; }
   padding: 0.45vmin 1.2vmin;
   border-radius: 999px;
   font: 600 1.85vmin/1.1 system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #f2f2f5;
+  color: var(--rating-color, #84cc16);
   background: var(--rating-bg, rgba(255, 255, 255, 0.1));
   border: 1px solid var(--rating-border, rgba(255, 255, 255, 0.18));
 }
 
-#info-user-rating[hidden] {
+#corner-rating {
+  position: absolute;
+  top: 2vmin;
+  right: 2.5vmin;
+  z-index: 3;
+  pointer-events: none;
+  font-size: clamp(15px, calc(var(--stable-vmin) * 0.0185), 20px);
+  line-height: 1.1;
+  padding: 0.38em 0.85em;
+  gap: 0.38em;
+  background:
+    linear-gradient(var(--rating-bg, rgba(255, 255, 255, 0.1)), var(--rating-bg, rgba(255, 255, 255, 0.1))),
+    rgba(12, 12, 16, 0.78);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+#info-user-rating[hidden],
+#corner-rating[hidden] {
   display: none;
 }
 
-#info-user-rating svg {
+#info-user-rating svg,
+#corner-rating svg {
   width: 1.85vmin;
   height: 1.85vmin;
   min-width: 12px;
   min-height: 12px;
   fill: var(--rating-color, #84cc16);
   stroke: var(--rating-color, #84cc16);
+}
+
+#corner-rating svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+#rating-keypad {
+  position: absolute;
+  right: 2.5vmin;
+  bottom: max(64px, calc(var(--stable-vmin) * 0.1));
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(12, 12, 16, 0.72);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  touch-action: manipulation;
+}
+
+#rating-keypad[hidden] {
+  display: none;
+}
+
+#rating-keypad button {
+  width: clamp(56px, calc(var(--stable-vmin) * 0.145), 74px);
+  height: clamp(56px, calc(var(--stable-vmin) * 0.145), 74px);
+  border-radius: 14px;
+  border: 1px solid var(--btn-border, rgba(255, 255, 255, 0.16));
+  background: var(--btn-bg, rgba(255, 255, 255, 0.08));
+  color: var(--btn-color, #f2f2f5);
+  font: 600 clamp(20px, calc(var(--stable-vmin) * 0.036), 26px)/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+#rating-keypad button:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.24);
+}
+
+#rating-keypad button.active {
+  border-color: var(--btn-color, #84cc16);
+  box-shadow: 0 0 0 1px var(--btn-color, #84cc16);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 #info-favorite {

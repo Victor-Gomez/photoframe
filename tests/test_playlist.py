@@ -72,32 +72,43 @@ def test_orientation_still_works_for_a_client_that_sends_no_ratio(client, app):
     assert served == ids_of(app, "Trip/Day1/tower.avif")
 
 
-def test_a_favourite_is_dealt_into_the_pass_favoriteweight_times(make_app):
-    app = make_app({"favorites": ["wide.avif"], "favoriteWeight": 10})
-    client = app.app.test_client()
-    body = client.get("/api/playlist?ratio=1.7778&limit=0").get_json()
+def test_rating_gives_one_ticket_per_point_and_five_when_unrated(make_app):
+    app = make_app({"weightByRating": True, "ratingFilter": "all"})
+    wide = photo_id_of("wide.avif")
+    beach = photo_id_of("Trip/Day1/beach.avif")
+    app.library.set_rating(wide, 9)
+    # Trip/Day1/beach.avif stays unrated -> 5 tickets
+    body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=0").get_json()
     counts = {pid: body["ids"].count(pid) for pid in set(body["ids"])}
-    favourite = photo_id_of("wide.avif")
-    assert counts.pop(favourite) == 10
-    assert set(counts.values()) == {1}
-    assert body["favorites"] == 1
+    assert counts[wide] == 9
+    assert counts[beach] == 5
+
+
+def test_rating_zero_gets_zero_tickets_when_weighted(make_app):
+    app = make_app({"weightByRating": True, "ratingFilter": "all"})
+    wide = photo_id_of("wide.avif")
+    app.library.set_rating(wide, 0)
+    body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=0").get_json()
+    assert wide not in body["ids"]
 
 
 def test_weighting_can_be_switched_off(make_app):
-    app = make_app({"favorites": ["wide.avif"], "favoriteWeight": 1})
+    app = make_app({"weightByRating": False, "ratingFilter": "all"})
+    wide = photo_id_of("wide.avif")
+    app.library.set_rating(wide, 10)
     body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=0").get_json()
-    assert body["ids"].count(photo_id_of("wide.avif")) == 1
+    assert body["ids"].count(wide) == 1
 
 
-def test_copies_of_a_favourite_are_spread_out_rather_than_adjacent():
+def test_copies_of_a_rated_photo_are_spread_out_rather_than_adjacent():
     import random
 
     from photoframe.web.playlist import weighted_shuffle
 
     random.seed(7)
     ids = [f"p{i:05d}" for i in range(2000)]
-    favourites = {"p00007"}
-    pass_ = weighted_shuffle(list(ids), favourites, 10)
+    ratings = {"p00007": 10}
+    pass_ = weighted_shuffle(list(ids), ratings, True)
 
     positions = [i for i, pid in enumerate(pass_) if pid == "p00007"]
     assert len(positions) == 10
@@ -164,13 +175,25 @@ def test_rating_filter_modes_filter_playlist(make_app):
     assert p_low not in unscored_ids
     assert p_high not in unscored_ids
 
-    # Above threshold 5: only p_high.
-    assert client.post("/api/settings", json={"ratingFilter": "above", "ratingThreshold": 5}).status_code == 200
+    # Scored only, threshold disabled: includes both rated photos.
+    assert client.post("/api/settings", json={"ratingFilter": "above", "ratingThresholdEnabled": False}).status_code == 200
+    scored_ids = set(client.get("/api/playlist").get_json()["ids"])
+    assert scored_ids == {p_low, p_high}
+
+    # Scored only, threshold 5 enabled: only p_high.
+    assert client.post("/api/settings", json={"ratingFilter": "above", "ratingThresholdEnabled": True, "ratingThreshold": 5}).status_code == 200
     above_ids = set(client.get("/api/playlist").get_json()["ids"])
     assert above_ids == {p_high}
 
-    # All: includes all three.
-    assert client.post("/api/settings", json={"ratingFilter": "all"}).status_code == 200
+    # All, threshold 5 enabled: excludes p_low (3), keeps p_unscored and p_high.
+    assert client.post("/api/settings", json={"ratingFilter": "all", "ratingThresholdEnabled": True, "ratingThreshold": 5}).status_code == 200
+    all_filtered_ids = set(client.get("/api/playlist").get_json()["ids"])
+    assert p_unscored in all_filtered_ids
+    assert p_high in all_filtered_ids
+    assert p_low not in all_filtered_ids
+
+    # All, threshold disabled: includes all three.
+    assert client.post("/api/settings", json={"ratingFilter": "all", "ratingThresholdEnabled": False}).status_code == 200
     all_ids = set(client.get("/api/playlist").get_json()["ids"])
     assert {p_unscored, p_low, p_high} <= all_ids
 

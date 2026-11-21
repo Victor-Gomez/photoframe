@@ -7,27 +7,34 @@ import secrets
 from flask import Blueprint, jsonify, request
 
 from ..library import ORIENTATIONS, orientation_from
+from ..preferences import device_id_from
 
 PAGE_DEFAULT = 300
+DEFAULT_RATING_WEIGHT = 5
+MAX_RATING_WEIGHT = 10
 
 
-def weighted_shuffle(ids: list[str], favorites: set[str], weight: int) -> list[str]:
-    """Shuffle a pass in which favourites appear `weight` times each.
+def weighted_shuffle(ids: list[str], ratings: dict[str, int | None], enabled: bool) -> list[str]:
+    """Shuffle a pass where each rating point gives an image one raffle ticket.
 
-    One copy per segment keeps the odds right without putting two copies close together.
+    Unrated images default to 5 tickets; 0-rated images get 0 tickets.
+    Spreading a photo's tickets across 10 segments avoids adjacent duplicates.
     """
-    plain = [pid for pid in ids if pid not in favorites]
-    starred = [pid for pid in ids if pid in favorites]
-    if weight <= 1 or not starred:
+    if not enabled:
         random.shuffle(ids)
         return ids
 
-    random.shuffle(plain)
-    segments: list[list[str]] = [[] for _ in range(weight)]
-    for position, pid in enumerate(plain):
-        segments[position % weight].append(pid)
+    segments: list[list[str]] = [[] for _ in range(MAX_RATING_WEIGHT)]
+    for pid in ids:
+        raw = ratings.get(pid)
+        weight = DEFAULT_RATING_WEIGHT if raw is None else max(0, min(MAX_RATING_WEIGHT, int(raw)))
+        if weight == 0:
+            continue
+        start = random.randrange(MAX_RATING_WEIGHT)
+        for k in range(weight):
+            segments[(start + (k * MAX_RATING_WEIGHT) // weight) % MAX_RATING_WEIGHT].append(pid)
+
     for segment in segments:
-        segment.extend(starred)
         random.shuffle(segment)
     return [pid for segment in segments for pid in segment]
 
@@ -36,7 +43,7 @@ def blueprint(frame):
     bp = Blueprint("playlist", __name__)
     library, rules, prefs = frame.library, frame.rules, frame.prefs
 
-    def page_of(token, ids, offset, limit, **extra):
+    def page_of(token, ids, offset, limit, dev_prefs, **extra):
         chunk = ids[offset:offset + limit] if limit else ids[offset:]
         return jsonify(
             token=token,
@@ -44,8 +51,8 @@ def blueprint(frame):
             offset=offset,
             count=len(chunk),
             ids=chunk,
-            favoriteWeight=prefs.favorite_weight,
-            slideSeconds=prefs.slide_seconds,
+            weightByRating=dev_prefs["weightByRating"],
+            slideSeconds=dev_prefs["slideSeconds"],
             indexing=not library.probe_done.is_set(),
             **extra,
         )
@@ -58,6 +65,7 @@ def blueprint(frame):
         `?orientation=landscape|portrait` says the same directly. Neither means the whole
         library. Favourites are not a separate mode: they appear `favoriteWeight` times.
         """
+        dev_prefs = prefs.for_device(device_id_from(request))
         limit = request.args.get("limit", type=int)
         limit = PAGE_DEFAULT if limit is None else max(0, limit)
 
@@ -67,7 +75,7 @@ def blueprint(frame):
             existing = library.passes.get(token)
             if existing is not None:
                 offset = max(0, request.args.get("offset", type=int) or 0)
-                return page_of(token, existing, offset, limit, photos=len(existing))
+                return page_of(token, existing, offset, limit, dev_prefs, photos=len(existing))
 
         want = request.args.get("orientation", "").lower()
         try:
@@ -101,34 +109,39 @@ def blueprint(frame):
 
         ids = [pid for pid, _ in items]
         relatives = library.rel_lower_map()
-        folder_filter = prefs.folder_filter.lower()
+        folder_filter = dev_prefs["folderFilter"].lower()
         if folder_filter:
             prefix = folder_filter + "/"
             ids = [
                 pid for pid in ids
                 if (rel := relatives.get(pid, "")) == folder_filter or rel.startswith(prefix)
             ]
-        rfilter = prefs.rating_filter
+        rfilter = dev_prefs["ratingFilter"]
         if rfilter == "unscored":
             ids = [pid for pid in ids if library.rating_of(pid) is None]
-        elif rfilter == "above":
-            thresh = prefs.rating_threshold
-            ids = [pid for pid in ids
-                   if (r := library.rating_of(pid)) is not None and r >= thresh]
+        else:
+            if rfilter == "above":
+                ids = [pid for pid in ids if library.rating_of(pid) is not None]
+            if dev_prefs["ratingThresholdEnabled"]:
+                thresh = dev_prefs["ratingThreshold"]
+                ids = [pid for pid in ids
+                       if (r := library.rating_of(pid)) is None or r >= thresh]
 
         favorite = rules.favorite_check()   # one snapshot for the whole pass
         favorites = {pid for pid in ids if favorite(relatives.get(pid, ""), pid)}
-        ids = weighted_shuffle(ids, favorites, prefs.favorite_weight)
+        ratings = {pid: library.rating_of(pid) for pid in ids}
+        ids = weighted_shuffle(ids, ratings, dev_prefs["weightByRating"])
 
         token = secrets.token_urlsafe(9)
         library.passes.add(token, ids)
         return page_of(
-            token, ids, offset=0, limit=limit,
+            token, ids, offset=0, limit=limit, dev_prefs=dev_prefs,
             photos=len(ids),
             favorites=len(favorites),
             ratingFilter=rfilter,
-            ratingThreshold=prefs.rating_threshold,
-            folderFilter=prefs.folder_filter,
+            ratingThresholdEnabled=dev_prefs["ratingThresholdEnabled"],
+            ratingThreshold=dev_prefs["ratingThreshold"],
+            folderFilter=dev_prefs["folderFilter"],
             ratio=screen or None,
             matchedOn=matched_on,
             orientation=want if want in ORIENTATIONS else "any",

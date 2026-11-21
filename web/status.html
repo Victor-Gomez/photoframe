@@ -33,7 +33,8 @@
     <h2>{{ t('h.preferences') }}</h2>
     <table>
       <tr><td>{{ t('row.slideSeconds') }}</td><td>{{ prefs.slideSeconds }}</td></tr>
-      <tr><td>{{ t('row.favoriteWeight') }}</td><td>×{{ prefs.favoriteWeight }}</td></tr>
+      <tr><td>{{ t('row.weightByRating') }}</td><td>{{ t('bool.on') if prefs.weightByRating else t('bool.off') }}</td></tr>
+      <tr><td>{{ t('row.showRating') }}</td><td>{{ t('bool.on') if prefs.showRating else t('bool.off') }}</td></tr>
       <tr><td>{{ t('row.imageFit') }}</td><td>{{ t('imageFit.' + prefs.imageFit) }}</td></tr>
       <tr><td>{{ t('row.quiet') }}</td>
         <td>

@@ -29,7 +29,8 @@ def test_settings_fall_back_to_config_json_until_something_is_written(app, clien
     shown = client.get("/api/settings").get_json()
 
     assert shown["slideSeconds"] == app.settings.slide_seconds == 15
-    assert shown["favoriteWeight"] == app.settings.favorite_weight == 10
+    assert shown["weightByRating"] is app.settings.weight_by_rating is False
+    assert shown["showRating"] is app.settings.show_rating is False
     assert shown["quietFrom"] == shown["quietTo"] == ""
     assert stored(app, "slideSeconds") is None
 
@@ -40,18 +41,19 @@ def test_saving_writes_the_database_and_comes_back(app, client):
 
     assert saved["slideSeconds"] == 45
     assert saved["quietFrom"] == "23:30"
-    assert saved["favoriteWeight"] == 10        # untouched by a partial save
+    assert saved["weightByRating"] is False        # untouched by a partial save
     assert stored(app, "quietFrom") == "23:30"
     assert client.get("/api/settings").get_json() == saved
 
 
 def test_the_frame_paces_itself_by_what_was_saved(app, client):
     """The setting has to reach the page that uses it, not just the database."""
-    client.post("/api/settings", json={"slideSeconds": 42, "favoriteWeight": 3})
+    client.post("/api/settings", json={"slideSeconds": 42, "weightByRating": True, "showRating": True})
 
     playlist = client.get("/api/playlist?ratio=1.5").get_json()
     assert playlist["slideSeconds"] == 42
-    assert playlist["favoriteWeight"] == 3
+    assert playlist["weightByRating"] is True
+    assert client.get("/api/settings").get_json()["showRating"] is True
 
 
 def test_impossible_values_are_refused_rather_than_stored(app, client):
@@ -66,11 +68,9 @@ def test_impossible_values_are_refused_rather_than_stored(app, client):
 
 
 def test_absurd_but_meaningful_values_are_clamped(app, client):
-    saved = client.post("/api/settings", json={
-        "slideSeconds": 1, "favoriteWeight": 10_000}).get_json()
+    saved = client.post("/api/settings", json={"slideSeconds": 1}).get_json()
 
     assert saved["slideSeconds"] == 3
-    assert saved["favoriteWeight"] == 100
 
 
 def test_settings_cannot_be_changed_while_the_database_is_on_loan(app, client):
@@ -197,8 +197,57 @@ def test_image_fit_defaults_to_cover_and_persists_fit(app, client):
     assert client.post("/api/settings", json={"imageFit": "stretch"}).status_code == 400
     saved = client.post("/api/settings", json={"imageFit": "fit"}).get_json()
     assert saved["imageFit"] == "fit"
-    assert stored(app, "imageFit") == "fit"
+    dev_id = client.get_cookie("frame_device").value
+    assert stored(app, f"device.{dev_id}.imageFit") == "fit"
     assert 'class="fit"' in client.get("/").get_data(as_text=True)
+
+
+def test_per_device_settings_are_isolated_by_cookie_and_persisted_in_db(app):
+    tablet = app.app.test_client()
+    pc = app.app.test_client()
+
+    # Visiting / or /settings mints distinct frame_device cookies.
+    assert tablet.get("/settings").status_code == 200
+    assert pc.get("/").status_code == 200
+    tablet_id = tablet.get_cookie("frame_device").value
+    pc_id = pc.get_cookie("frame_device").value
+    assert tablet_id != pc_id
+
+    p_unscored = photo_id_of("wide.avif")
+    p_high = photo_id_of("Trip/Day1/beach.avif")
+    assert pc.post("/api/rating", json={"id": p_high, "rating": 9}).status_code == 200
+
+    # Tablet: cover, scored >= 7, hide badge.
+    tablet.post("/api/settings", json={
+        "imageFit": "cover",
+        "ratingFilter": "above",
+        "ratingThresholdEnabled": True,
+        "ratingThreshold": 7,
+        "showRating": False,
+        "slideSeconds": 45,
+    })
+    # PC: fit, unscored only, show badge.
+    pc.post("/api/settings", json={
+        "imageFit": "fit",
+        "ratingFilter": "unscored",
+        "showRating": True,
+    })
+
+    tablet_settings = tablet.get("/api/settings").get_json()
+    pc_settings = pc.get("/api/settings").get_json()
+    assert tablet_settings["imageFit"] == "cover"
+    assert tablet_settings["ratingFilter"] == "above"
+    assert tablet_settings["ratingThreshold"] == 7
+    assert tablet_settings["showRating"] is False
+    assert pc_settings["imageFit"] == "fit"
+    assert pc_settings["ratingFilter"] == "unscored"
+    assert pc_settings["showRating"] is True
+    # Global setting applies to both.
+    assert tablet_settings["slideSeconds"] == pc_settings["slideSeconds"] == 45
+
+    assert set(tablet.get("/api/playlist").get_json()["ids"]) == {p_high}
+    assert p_unscored in set(pc.get("/api/playlist").get_json()["ids"])
+    assert p_high not in set(pc.get("/api/playlist").get_json()["ids"])
 
 
 def test_fit_render_keeps_aspect_ratio_without_cropping(app, client):

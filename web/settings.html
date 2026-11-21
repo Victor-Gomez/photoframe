@@ -21,57 +21,6 @@
       </div>
 
       <div class="field">
-        <label for="favoriteWeight">{{ t('row.favoriteWeight') }}
-          <small>{{ t('hint.favoriteWeight') }}</small></label>
-        <div class="controls">
-          <input type="number" id="favoriteWeight" min="1" max="100" value="{{ settings.favoriteWeight }}">
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="ratingFilter">{{ t('row.ratingFilter') }}</label>
-        <div class="controls">
-          <select id="ratingFilter">
-            {% for opt in ratingFilters %}
-            <option value="{{ opt }}" {{ "selected" if settings.ratingFilter == opt }}>{{ t('ratingFilter.' + opt) }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="ratingThreshold">{{ t('row.ratingThreshold') }}
-          <small>{{ t('hint.ratingThreshold') }}</small></label>
-        <div class="controls">
-          <input type="number" id="ratingThreshold" min="0" max="10" value="{{ settings.ratingThreshold }}">
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="folderFilter">{{ t('row.folderFilter') }}
-          <small>{{ t('hint.folderFilter') }}</small></label>
-        <div class="controls">
-          <input type="text" id="folderFilter" list="folderList" placeholder="{{ t('folderFilter.all') }}" value="{{ settings.folderFilter }}">
-          <datalist id="folderList">
-            {% for folder in folders %}
-            <option value="{{ folder }}">
-            {% endfor %}
-          </datalist>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="imageFit">{{ t('row.imageFit') }}</label>
-        <div class="controls">
-          <select id="imageFit">
-            {% for opt in imageFits %}
-            <option value="{{ opt }}" {{ "selected" if settings.imageFit == opt }}>{{ t('imageFit.' + opt) }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
         <label>{{ t('row.quiet') }}
           <small>{{ t('hint.quiet') }}</small></label>
         <div class="controls">
@@ -112,6 +61,74 @@
     <h2>{{ t('h.device') }}</h2>
     <p class="note">{{ t('device.note') }}</p>
     <fieldset>
+      <div class="field">
+        <label for="weightByRating">{{ t('row.weightByRating') }}
+          <small>{{ t('hint.weightByRating') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="weightByRating" {{ "checked" if settings.weightByRating }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="showRating">{{ t('row.showRating') }}
+          <small>{{ t('hint.showRating') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="showRating" {{ "checked" if settings.showRating }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ratingFilter">{{ t('row.ratingFilter') }}</label>
+        <div class="controls">
+          <select id="ratingFilter">
+            {% for opt in ratingFilters %}
+            <option value="{{ opt }}" {{ "selected" if settings.ratingFilter == opt }}>{{ t('ratingFilter.' + opt) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ratingThreshold">{{ t('row.ratingThreshold') }}
+          <small>{{ t('hint.ratingThreshold') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="ratingThresholdEnabled" {{ "checked" if settings.ratingThresholdEnabled }}>
+          </label>
+          <input type="number" id="ratingThreshold" min="0" max="10" value="{{ settings.ratingThreshold }}">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="folderFilter">{{ t('row.folderFilter') }}
+          <small>{{ t('hint.folderFilter') }}</small></label>
+        <div class="controls">
+          <select id="folderFilter">
+            <option value="" {{ "selected" if not settings.folderFilter }}>{{ t('folderFilter.all') }}</option>
+            {% if settings.folderFilter and settings.folderFilter not in folders %}
+            <option value="{{ settings.folderFilter }}" selected>{{ settings.folderFilter }}</option>
+            {% endif %}
+            {% for folder in folders %}
+            <option value="{{ folder }}" {{ "selected" if settings.folderFilter == folder }}>{{ folder }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="imageFit">{{ t('row.imageFit') }}</label>
+        <div class="controls">
+          <select id="imageFit">
+            {% for opt in imageFits %}
+            <option value="{{ opt }}" {{ "selected" if settings.imageFit == opt }}>{{ t('imageFit.' + opt) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
       <div class="field">
         <label for="imageMode">{{ t('row.images') }}
           <small id="deviceNote"></small></label>
@@ -164,6 +181,11 @@
     }
     paintQuiet();
 
+    function paintThreshold() {
+      $('ratingThreshold').disabled = !$('ratingThresholdEnabled').checked || $('ratingFilter').value === 'unscored';
+    }
+    paintThreshold();
+
     async function save(patch) {
       try {
         const res = await fetch('/api/settings', {
@@ -175,9 +197,12 @@
         if (!res.ok) throw new Error(body.error || res.status);
         // Echo what was stored rather than what was typed: the server clamps.
         $('slideSeconds').value = body.slideSeconds;
-        $('favoriteWeight').value = body.favoriteWeight;
+        $('weightByRating').checked = !!body.weightByRating;
+        $('showRating').checked = !!body.showRating;
         $('ratingFilter').value = body.ratingFilter;
+        $('ratingThresholdEnabled').checked = !!body.ratingThresholdEnabled;
         $('ratingThreshold').value = body.ratingThreshold;
+        paintThreshold();
         $('folderFilter').value = body.folderFilter;
         $('imageFit').value = body.imageFit;
         // The page is rendered by the server, so its own language changes on reload — and
@@ -194,8 +219,10 @@
     }
 
     $('slideSeconds').addEventListener('change', () => save({ slideSeconds: +$('slideSeconds').value }));
-    $('favoriteWeight').addEventListener('change', () => save({ favoriteWeight: +$('favoriteWeight').value }));
-    $('ratingFilter').addEventListener('change', () => save({ ratingFilter: $('ratingFilter').value }));
+    $('weightByRating').addEventListener('change', () => save({ weightByRating: $('weightByRating').checked }));
+    $('showRating').addEventListener('change', () => save({ showRating: $('showRating').checked }));
+    $('ratingFilter').addEventListener('change', () => { paintThreshold(); save({ ratingFilter: $('ratingFilter').value }); });
+    $('ratingThresholdEnabled').addEventListener('change', () => { paintThreshold(); save({ ratingThresholdEnabled: $('ratingThresholdEnabled').checked }); });
     $('ratingThreshold').addEventListener('change', () => save({ ratingThreshold: +$('ratingThreshold').value }));
     $('folderFilter').addEventListener('change', () => save({ folderFilter: $('folderFilter').value }));
     $('imageFit').addEventListener('change', () => save({ imageFit: $('imageFit').value }));

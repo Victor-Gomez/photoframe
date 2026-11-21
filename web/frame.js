@@ -83,6 +83,8 @@
       'menu.hidePhoto': 'Ocultar esta foto',
       'menu.gallery': 'Fotos cercanas',
       'menu.info': 'Información',
+      'menu.keypadShow': 'Teclado de valoración',
+      'menu.keypadHide': 'Ocultar teclado de valoración',
       'menu.settings': 'Ajustes',
       'menu.newTab': 'Abrir en una pestaña nueva',
       'menu.cancel': 'Cancelar',
@@ -152,6 +154,8 @@
       'menu.hidePhoto': 'Hide this photo',
       'menu.gallery': 'Nearby photos',
       'menu.info': 'Information',
+      'menu.keypadShow': 'Rating keypad',
+      'menu.keypadHide': 'Hide rating keypad',
       'menu.settings': 'Settings',
       'menu.newTab': 'Open in new tab',
       'menu.cancel': 'Cancel',
@@ -663,8 +667,35 @@
   addEventListener('keydown', wake, { capture: true });
 
   let activeRatingFilter = null;
+  let activeRatingThresholdEnabled = null;
   let activeRatingThreshold = null;
   let activeFolderFilter = null;
+  let activeWeightByRating = null;
+  let showRating = false;
+  let currentRating = null;
+  const cornerRating = document.getElementById('corner-rating');
+  const ratingKeypad = document.getElementById('rating-keypad');
+  const toggleKeypadLabel = document.getElementById('toggle-keypad-label');
+  let keypadVisible = false;
+
+  function syncKeypad() {
+    document.body.classList.toggle('keypad-open', keypadVisible);
+    if (ratingKeypad) {
+      ratingKeypad.hidden = !keypadVisible;
+      for (const btn of ratingKeypad.querySelectorAll('button[data-rating]')) {
+        const val = Number(btn.dataset.rating);
+        const col = scoreColor(val);
+        btn.style.setProperty('--btn-color', col);
+        btn.style.setProperty('--btn-bg', `${col}1f`);
+        btn.style.setProperty('--btn-border', `${col}4d`);
+        btn.classList.toggle('active', currentRating === val);
+      }
+    }
+    if (toggleKeypadLabel) {
+      toggleKeypadLabel.dataset.t = keypadVisible ? 'menu.keypadHide' : 'menu.keypadShow';
+      toggleKeypadLabel.textContent = t(toggleKeypadLabel.dataset.t);
+    }
+  }
   async function readSettings() {
     try {
       const data = await (await fetch('/api/settings', { cache: 'no-store' })).json();
@@ -673,15 +704,21 @@
       if (data.slideSeconds) slide = data.slideSeconds * 1000;
       if (activeRatingFilter !== null && (
         data.ratingFilter !== activeRatingFilter ||
+        Boolean(data.ratingThresholdEnabled) !== activeRatingThresholdEnabled ||
         data.ratingThreshold !== activeRatingThreshold ||
-        data.folderFilter !== activeFolderFilter
+        data.folderFilter !== activeFolderFilter ||
+        Boolean(data.weightByRating) !== activeWeightByRating
       )) {
-        // Rating or folder filter changed on /settings: force a fresh playlist on the next advance.
+        // Rating, folder, or weighting changed on /settings: force a fresh playlist on the next advance.
         cursor = ids.length;
       }
       activeRatingFilter = data.ratingFilter;
+      activeRatingThresholdEnabled = Boolean(data.ratingThresholdEnabled);
       activeRatingThreshold = data.ratingThreshold;
       activeFolderFilter = data.folderFilter;
+      activeWeightByRating = Boolean(data.weightByRating);
+      showRating = Boolean(data.showRating);
+      renderRatingBadge(cornerRating, showRating ? currentRating : null);
       if (data.imageFit) {
         imageFit = data.imageFit === 'fit' ? 'fit' : 'cover';
         document.body.classList.toggle('fit', imageFit === 'fit');
@@ -1012,10 +1049,16 @@
   async function describeCurrent() {
     const id = currentId;
     showHeart(false);
+    currentRating = null;
+    renderRatingBadge(cornerRating, null);
+    syncKeypad();
     try {
       const info = await (await fetch(`/api/photo/${id}`, { cache: 'no-store' })).json();
       if (id !== currentId) return;  // the slide moved on while this was in flight
       showHeart(!!info.favorite);
+      currentRating = info.rating ?? null;
+      renderRatingBadge(cornerRating, showRating ? currentRating : null);
+      syncKeypad();
       // Inside a span, so the ltr rule above governs the order of the segments.
       const label = document.createElement('span');
       label.textContent = info.folder ? `${info.folder}/${info.file}` : info.file;
@@ -1094,6 +1137,10 @@
       });
       const data = await res.json();
       if (!res.ok || data.error) { say(data.error || t('rateFailed')); return; }
+      if (id === currentId) {
+        currentRating = score;
+        renderRatingBadge(cornerRating, showRating ? currentRating : null);
+      }
       say(t('rated', score));
       step('forward');
     } catch {
@@ -1488,6 +1535,20 @@
   const infoUserRating = document.getElementById('info-user-rating');
   const infoFavorite = document.getElementById('info-favorite');
 
+  function renderRatingBadge(el, score) {
+    if (!el) return;
+    if (score == null) {
+      el.hidden = true;
+      return;
+    }
+    const col = scoreColor(score);
+    el.replaceChildren(glyph('star'), document.createTextNode(`${score} / 10`));
+    el.style.setProperty('--rating-color', col);
+    el.style.setProperty('--rating-bg', `${col}1f`);
+    el.style.setProperty('--rating-border', `${col}4d`);
+    el.hidden = false;
+  }
+
   // 0-10 red -> orange -> amber -> yellow-green -> lime -> green scale.
   function scoreColor(score) {
     const s = Math.max(0, Math.min(10, Number(score) || 0));
@@ -1683,16 +1744,7 @@
 
     infoTitle.textContent = info.file || '';
     infoFavorite.hidden = !info.favorite;
-    if (info.user_rating != null) {
-      const col = scoreColor(info.user_rating);
-      infoUserRating.replaceChildren(glyph('star'), document.createTextNode(`${info.user_rating} / 10`));
-      infoUserRating.style.setProperty('--rating-color', col);
-      infoUserRating.style.setProperty('--rating-bg', `${col}1f`);
-      infoUserRating.style.setProperty('--rating-border', `${col}4d`);
-      infoUserRating.hidden = false;
-    } else {
-      infoUserRating.hidden = true;
-    }
+    renderRatingBadge(infoUserRating, info.user_rating);
 
     // Explicit lines, grouped by what a person is actually asking when they open this:
     // when and how big, then what took it, then where, then who, then where it lives.
@@ -1860,6 +1912,23 @@
     event.stopPropagation();
     openInfo(menuId);
   });
+  document.getElementById('toggle-keypad').addEventListener('click', event => {
+    event.stopPropagation();
+    keypadVisible = !keypadVisible;
+    syncKeypad();
+    closeMenu();
+  });
+  if (ratingKeypad) {
+    for (const ev of ['touchstart', 'pointerdown', 'mousedown']) {
+      ratingKeypad.addEventListener(ev, event => event.stopPropagation(), { passive: true });
+    }
+    ratingKeypad.addEventListener('click', event => {
+      event.stopPropagation();
+      const btn = event.target.closest('button[data-rating]');
+      if (!btn || !currentId) return;
+      setRating(currentId, Number(btn.dataset.rating));
+    });
+  }
   // Leaves the slideshow, which is the only way to reach the settings of *this* device:
   // half of them live in its own browser. The page links back.
   document.getElementById('open-settings').addEventListener('click', event => {

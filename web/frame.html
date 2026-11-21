@@ -153,6 +153,18 @@
        writes that one inline, and the two would fight over every crossfade. -->
   <div id="night" aria-hidden="true"></div>
   <div id="hud"><span id="path"></span><span id="clock"></span></div>
+  <div id="corner-rating" hidden aria-hidden="true"></div>
+  <div id="rating-keypad" hidden role="group" aria-label="Teclado de valoración">
+    <button type="button" data-rating="7">7</button>
+    <button type="button" data-rating="8">8</button>
+    <button type="button" data-rating="9">9</button>
+    <button type="button" data-rating="4">4</button>
+    <button type="button" data-rating="5">5</button>
+    <button type="button" data-rating="6">6</button>
+    <button type="button" data-rating="1">1</button>
+    <button type="button" data-rating="2">2</button>
+    <button type="button" data-rating="3">3</button>
+  </div>
   <div id="status">
     <div class="loader">
       <div class="box1"></div>
@@ -238,6 +250,10 @@
     <button id="open-info" role="menuitem">
       <svg class="ico" aria-hidden="true"><use href="#i-info" /></svg>
       <span data-t="menu.info">Información</span>
+    </button>
+    <button id="toggle-keypad" role="menuitem">
+      <svg class="ico" aria-hidden="true"><use href="#i-star" /></svg>
+      <span id="toggle-keypad-label" data-t="menu.keypadShow">Teclado de valoración</span>
     </button>
     <button id="open-settings" role="menuitem">
       <svg class="ico" aria-hidden="true"><use href="#i-cog" /></svg>

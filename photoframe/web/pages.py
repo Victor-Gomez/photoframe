@@ -4,10 +4,11 @@ import io
 import logging
 from pathlib import Path
 
-from flask import Blueprint, abort, jsonify, render_template, request, send_file
+from flask import Blueprint, abort, jsonify, make_response, render_template, request, send_file
 
 from ..i18n import COOKIE, chosen
 from ..imaging import MAX_RENDER_EDGE, SOURCE_MIME
+from ..preferences import resolve_device, set_device_cookie
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +32,15 @@ def blueprint(frame):
     def index():
         # The language is in the markup so the first paint is already right; frame.js keeps
         # its own catalogue and re-does the page when the setting changes.
-        return render_template(
+        device_id, is_new = resolve_device(request)
+        dev_prefs = frame.prefs.for_device(device_id)
+        response = make_response(render_template(
             "frame.html", assets=asset_versions(),
-            lang=chosen(request.cookies.get(COOKIE), frame.prefs.language),
-            imageFit=frame.prefs.image_fit)
+            lang=chosen(request.cookies.get(COOKIE), dev_prefs["language"]),
+            imageFit=dev_prefs["imageFit"]))
+        if is_new:
+            set_device_cookie(response, device_id)
+        return response
 
     @bp.get("/api/assets")
     def asset_list():

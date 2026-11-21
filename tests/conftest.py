@@ -52,7 +52,8 @@ def make_app(tmp_path, library, monkeypatch):
         settings = {
             "photoDir": str(library),
             "slideSeconds": 15,
-            "favoriteWeight": 10,
+            "weightByRating": False,
+            "showRating": False,
             "blacklist": {"folders": [], "files": []},
             "favorites": [],
             "unfavorites": [],
