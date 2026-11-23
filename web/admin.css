@@ -259,7 +259,7 @@ button:disabled { opacity: .5; cursor: default; }
 
 .segmented button[aria-checked="true"] {
   background: #23232a;
-  border-color: #3c63b0;
+  border-color: #454552;
   color: #fff;
 }
 
