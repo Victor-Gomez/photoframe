@@ -14,9 +14,13 @@
     {% if not db.open %}<p class="note bad">{{ t('db.busy') }}</p>{% endif %}
     <fieldset>
       <div class="field">
-        <label for="slideSeconds">{{ t('row.slideSeconds') }}</label>
+        <label id="slideSecondsLabel">{{ t('row.slideSeconds') }}</label>
         <div class="controls">
-          <input type="number" id="slideSeconds" min="3" max="3600" value="{{ settings.slideSeconds }}">
+          <div class="stepper" id="slideSecondsStepper" aria-labelledby="slideSecondsLabel">
+            <button type="button" id="slideMinus" aria-label="−">−</button>
+            <span id="slideSeconds"></span>
+            <button type="button" id="slidePlus" aria-label="+">+</button>
+          </div>
         </div>
       </div>
 
@@ -261,6 +265,22 @@
       return active ? active.dataset.value : '';
     }
 
+    const SLIDE_STEPS = [10, 15, 30, 60, 120, 180, 240, 300, 600, 900, 1800, 3600];
+    let slideSeconds = {{ settings.slideSeconds | int }};
+
+    function formatSlide(sec) {
+      if (sec >= 3600) return `${Math.round(sec / 3600)}h`;
+      if (sec >= 60 && sec % 60 === 0) return `${sec / 60}m`;
+      return `${sec}s`;
+    }
+
+    function paintSlide() {
+      $('slideSeconds').textContent = formatSlide(slideSeconds);
+      $('slideMinus').disabled = slideSeconds <= SLIDE_STEPS[0];
+      $('slidePlus').disabled = slideSeconds >= SLIDE_STEPS[SLIDE_STEPS.length - 1];
+    }
+    paintSlide();
+
     function paintThreshold() {
       const disabled = !$('ratingThresholdEnabled').checked || segmentedValue('ratingFilter') === 'unscored';
       $('ratingThresholdStepper').classList.toggle('disabled', disabled);
@@ -292,7 +312,8 @@
         const body = await res.json();
         if (!res.ok) throw new Error(body.error || res.status);
         // Echo what was stored rather than what was typed: the server clamps.
-        $('slideSeconds').value = body.slideSeconds;
+        slideSeconds = body.slideSeconds;
+        paintSlide();
         $('weightByRating').checked = !!body.weightByRating;
         $('showRating').checked = !!body.showRating;
         paintSegmented('ratingFilter', body.ratingFilter);
@@ -328,7 +349,20 @@
       });
     }
 
-    $('slideSeconds').addEventListener('change', () => save({ slideSeconds: +$('slideSeconds').value }));
+    $('slideMinus').addEventListener('click', () => {
+      const prev = [...SLIDE_STEPS].reverse().find(s => s < slideSeconds);
+      if (prev === undefined) return;
+      slideSeconds = prev;
+      paintSlide();
+      save({ slideSeconds });
+    });
+    $('slidePlus').addEventListener('click', () => {
+      const next = SLIDE_STEPS.find(s => s > slideSeconds);
+      if (next === undefined) return;
+      slideSeconds = next;
+      paintSlide();
+      save({ slideSeconds });
+    });
     $('weightByRating').addEventListener('change', () => save({ weightByRating: $('weightByRating').checked }));
     $('showRating').addEventListener('change', () => save({ showRating: $('showRating').checked }));
     bindSegmented('ratingFilter', val => { paintThreshold(); save({ ratingFilter: val }); });

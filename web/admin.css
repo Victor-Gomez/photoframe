@@ -301,7 +301,8 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 .stepper span {
-  min-width: 2rem;
+  min-width: 2.6rem;
+  padding: 0 .25rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
