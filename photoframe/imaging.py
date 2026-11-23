@@ -72,12 +72,13 @@ class RenderCache:
     photo seen for the first time still pays the full decode.
     """
 
-    def __init__(self, budget_bytes: int):
+    def __init__(self, budget_bytes: int, hits: int = 0, misses: int = 0):
         self.budget = budget_bytes
         self._entries: "OrderedDict[tuple, bytes]" = OrderedDict()
         self._lock = threading.Lock()
         self._bytes = 0
-        self.hits = self.misses = 0
+        self.hits = max(0, int(hits))
+        self.misses = max(0, int(misses))
 
     def __len__(self) -> int:
         with self._lock:
@@ -124,6 +125,10 @@ class RenderCache:
             while self._bytes > self.budget and self._entries:
                 self._bytes -= len(self._entries.popitem(last=False)[1])
 
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {"hits": self.hits, "misses": self.misses}
+
     def stats(self) -> dict:
         with self._lock:
             looked_up = self.hits + self.misses
@@ -144,9 +149,18 @@ class Traffic:
     itself. Counted because the render figures otherwise read as the whole of the traffic.
     """
 
-    def __init__(self):
+    def __init__(self, initial: dict | None = None):
         self._lock = threading.Lock()
         self._sent = {"rendered": [0, 0], "original": [0, 0]}   # requests, bytes
+        if isinstance(initial, dict):
+            for kind in ("rendered", "original"):
+                pair = initial.get(kind)
+                if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                    self._sent[kind] = [max(0, int(pair[0])), max(0, int(pair[1]))]
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {kind: list(counted) for kind, counted in self._sent.items()}
 
     def sent(self, kind: str, size) -> None:
         with self._lock:

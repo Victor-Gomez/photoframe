@@ -105,6 +105,21 @@ def test_photos_served_untouched_are_counted_apart_from_renders(app, client):
     assert traffic["originalShare"] == "50%"
 
 
+def test_lifetime_stats_persist_across_restarts(make_app):
+    first = make_app()
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    c1 = first.app.test_client()
+    assert c1.get(f"/img/{pid}").status_code == 200
+    assert c1.get(f"/img/{pid}?w=320&h=200").status_code == 200
+    first.frame.save_stats()
+
+    second = make_app()
+    stats = second.app.test_client().get("/api/render-stats").get_json()
+    assert stats["traffic"]["original"]["requests"] == 1
+    assert stats["traffic"]["rendered"]["requests"] == 1
+    assert stats["cache"]["misses"] == 2
+
+
 def test_the_status_page_shows_the_quiet_hours(app, client):
     client.post("/api/settings", json={"quietFrom": "23:30", "quietTo": "07:15"})
 
