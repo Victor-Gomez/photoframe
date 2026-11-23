@@ -129,13 +129,18 @@
       </div>
 
       <div class="field">
-        <label for="imageFit">{{ t('row.imageFit') }}</label>
+        <label id="imageFitLabel">{{ t('row.imageFit') }}</label>
         <div class="controls">
-          <select id="imageFit">
-            {% for opt in imageFits %}
-            <option value="{{ opt }}" {{ "selected" if settings.imageFit == opt }}>{{ t('imageFit.' + opt) }}</option>
-            {% endfor %}
-          </select>
+          <div class="segmented" id="imageFit" role="radiogroup" aria-labelledby="imageFitLabel">
+            <button type="button" role="radio" data-value="cover" aria-checked="{{ 'true' if settings.imageFit == 'cover' else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="m9 9-6-6"/></svg>
+              <span>{{ t('imageFit.cover') }}</span>
+            </button>
+            <button type="button" role="radio" data-value="fit" aria-checked="{{ 'true' if settings.imageFit == 'fit' else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 15 6 6m-6-6v4.8m0-4.8h4.8"/><path d="M9 19.8V15m0 0H4.2M9 15l-6 6"/><path d="M15 4.2V9m0 0h4.8M15 9l6-6"/><path d="M9 4.2V9m0 0H4.2M9 9 3 3"/></svg>
+              <span>{{ t('imageFit.fit') }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -248,7 +253,7 @@
         $('ratingThreshold').value = body.ratingThreshold;
         paintThreshold();
         $('folderFilter').value = body.folderFilter;
-        $('imageFit').value = body.imageFit;
+        paintSegmented('imageFit', body.imageFit);
         paintSegmented('orientationFilter', body.orientationFilter);
         // The page is rendered by the server, so its own language changes on reload — and
         // the page coming back in the new language is the acknowledgement.
@@ -277,7 +282,13 @@
     $('ratingThresholdEnabled').addEventListener('change', () => { paintThreshold(); save({ ratingThresholdEnabled: $('ratingThresholdEnabled').checked }); });
     $('ratingThreshold').addEventListener('change', () => save({ ratingThreshold: +$('ratingThreshold').value }));
     $('folderFilter').addEventListener('change', () => save({ folderFilter: $('folderFilter').value }));
-    $('imageFit').addEventListener('change', () => save({ imageFit: $('imageFit').value }));
+    $('imageFit').addEventListener('click', e => {
+      const btn = e.target.closest('button[data-value]');
+      if (!btn) return;
+      const val = btn.dataset.value;
+      paintSegmented('imageFit', val);
+      save({ imageFit: val });
+    });
     $('orientationFilter').addEventListener('click', e => {
       const btn = e.target.closest('button[data-value]');
       if (!btn) return;
