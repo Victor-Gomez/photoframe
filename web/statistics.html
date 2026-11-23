@@ -5,7 +5,7 @@
   {% include "admin-head.html" %}
 </head>
 
-<body>
+<body class="stats-page">
   <main>
     {% include "admin-header.html" %}
     <h1 class="visually-hidden">{{ t('statistics.title') }}</h1>
@@ -18,6 +18,17 @@
         <option value="{{ cat }}" {{ "selected" if stats.catalog == cat }}>{{ cat }}</option>
         {% endfor %}
       </select>
+      <button id="refreshStatsBtn" class="stats-refresh" type="button"
+        aria-label="{{ 'Actualizar' if lang == 'es' else 'Refresh' }}"
+        title="{{ 'Actualizar' if lang == 'es' else 'Refresh' }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M8 16H3v5" />
+        </svg>
+      </button>
     </div>
 
     <p id="dbBusyNote" class="note bad" {{ "" if not stats.databaseOpen else "hidden" }}>{{ t('db.busy') }}</p>
@@ -25,83 +36,84 @@
     <div id="statsBody" aria-live="polite" {{ "" if stats.databaseOpen else "hidden" }}>
       <div class="tiles">
         <div class="tile"><b id="tileTotal">—</b><span>{{ t('stats.totalPhotos') }}</span></div>
-        <div class="tile"><b id="tileUserRated">—</b><span id="tileUserSub">{{ t('stats.userRated') }}</span></div>
-        <div class="tile"><b id="tileAiScored">—</b><span id="tileAiSub">{{ t('stats.aiScored') }}</span></div>
+        <div class="tile"><b id="tileUserRated" class="tile-ratio">—</b><span>{{ t('stats.userRated') }}</span><span id="tileUserSub" class="tile-sub"></span></div>
+        <div class="tile"><b id="tileAiScored" class="tile-ratio">—</b><span>{{ t('stats.aiScored') }}</span><span id="tileAiSub" class="tile-sub"></span></div>
         <div class="tile"><b id="tileFavorites">—</b><span>{{ t('stats.favorites') }}</span></div>
-        <div class="tile"><b id="tileHeroes">—</b><span>{{ t('stats.heroes') }}</span></div>
-        <div class="tile"><b id="tileCulls">—</b><span>{{ t('stats.culls') }}</span></div>
       </div>
 
-      <h2>{{ t('stats.h.userRatings') }}</h2>
-      <div class="stats-panel">
-        <ul id="userRatingsChart" class="score-chart"></ul>
-      </div>
-
-      <h2>{{ t('stats.h.aiScores') }}</h2>
-      <div class="stats-panel">
-        <ul id="aiScoresChart" class="score-chart"></ul>
-      </div>
-
-      <div id="aiSubSection">
-        <h2>{{ t('stats.h.aiSubscores') }}</h2>
-        <div class="stats-panel">
-          <ul id="aiSubscoresList" class="hbar-list"></ul>
+      <div class="stats-charts">
+        <div>
+          <h2>{{ t('stats.h.userRatings') }}</h2>
+          <div class="stats-panel">
+            <ul id="userRatingsChart" class="score-chart"></ul>
+          </div>
+        </div>
+        <div>
+          <h2>{{ t('stats.h.aiScores') }}</h2>
+          <div class="stats-panel">
+            <ul id="aiScoresChart" class="score-chart"></ul>
+          </div>
         </div>
       </div>
 
-      <div id="topAlbumsSection" class="stats-grid">
-        <div>
+      <div class="stats-bento">
+        <div id="aiSubSection" class="bento-card stats-section">
+          <h2>{{ t('stats.h.aiSubscores') }}</h2>
+          <div class="stats-panel">
+            <ul id="aiSubscoresList" class="hbar-list"></ul>
+          </div>
+        </div>
+
+        <div id="topAlbumsUserCard" class="bento-card stats-section">
           <h2>{{ t('stats.h.topAlbumsUser') }}</h2>
           <div class="stats-panel">
             <ul id="topAlbumsUserList" class="hbar-list"></ul>
           </div>
         </div>
-        <div>
+
+        <div id="topAlbumsAiCard" class="bento-card stats-section">
           <h2>{{ t('stats.h.topAlbumsAi') }}</h2>
           <div class="stats-panel">
             <ul id="topAlbumsAiList" class="hbar-list"></ul>
           </div>
         </div>
-      </div>
 
-      <div class="stats-grid">
-        <div>
+        <div class="bento-card">
           <h2>{{ t('stats.h.orientations') }}</h2>
           <div class="stats-panel">
             <ul id="orientationsList" class="hbar-list"></ul>
           </div>
         </div>
-        <div>
+
+        <div class="bento-card">
           <h2>{{ t('stats.h.years') }}</h2>
           <div class="stats-panel">
             <ul id="yearsList" class="hbar-list"></ul>
           </div>
         </div>
-      </div>
 
-      <div class="stats-grid">
-        <div>
+        <div class="bento-card">
           <h2>{{ t('stats.h.categories') }}</h2>
           <div class="stats-panel">
             <ul id="categoriesList" class="hbar-list"></ul>
           </div>
         </div>
-        <div>
+
+        <div class="bento-card">
           <h2>{{ t('stats.h.cameras') }}</h2>
           <div class="stats-panel">
             <ul id="camerasList" class="hbar-list"></ul>
           </div>
         </div>
-      </div>
 
-      <div class="stats-grid">
-        <div>
+        <div class="bento-card">
           <h2>{{ t('stats.h.people') }}</h2>
           <div class="stats-panel">
             <ul id="peopleList" class="hbar-list"></ul>
           </div>
         </div>
-        <div>
+
+        <div class="bento-card">
           <h2>{{ t('stats.h.places') }}</h2>
           <div class="stats-panel">
             <ul id="placesList" class="hbar-list"></ul>
@@ -115,6 +127,86 @@
     const INITIAL_STATS = {{ stats|tojson }};
     const T = {{ js_text|tojson }};
     const $ = id => document.getElementById(id);
+    const supportsSiblingIndex = CSS.supports('animation-delay: calc(sibling-index() * 0.1s)');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let latestCatalogReq = 0;
+
+    function setSiblingIndices(container) {
+      if (supportsSiblingIndex || !container) return;
+      [...container.children].forEach((el, index) => {
+        el.style.setProperty('--sibling-index', index + 1);
+      });
+    }
+
+    let supportsDisplayTransition;
+    function canTransitionDisplay() {
+      if (supportsDisplayTransition !== undefined) return supportsDisplayTransition;
+      if (!window.CSS?.supports?.('transition-behavior', 'allow-discrete') || !document.body) {
+        return false;
+      }
+      const probe = document.createElement('div');
+      probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;';
+      document.body.appendChild(probe);
+      getComputedStyle(probe).display;
+      probe.style.display = 'none';
+      supportsDisplayTransition = getComputedStyle(probe).display === 'block';
+      probe.remove();
+      return supportsDisplayTransition;
+    }
+
+    async function setSectionVisible(el, visible) {
+      if (visible) {
+        el.removeAttribute('data-closing');
+        el.hidden = false;
+        return;
+      }
+      if (el.hidden) return;
+      if (canTransitionDisplay()) {
+        el.hidden = true;
+        return;
+      }
+      el.setAttribute('data-closing', '');
+      const animations = el.getAnimations();
+      if (animations.length > 0) {
+        await Promise.race([
+          Promise.allSettled(animations.map(a => a.finished)),
+          new Promise(r => setTimeout(r, 400)),
+        ]);
+      }
+      if (el.hasAttribute('data-closing')) {
+        el.removeAttribute('data-closing');
+        el.hidden = true;
+      }
+    }
+
+    const countRafs = new WeakMap();
+    function animateCount(el, target, format = fmtNum) {
+      const end = Number(target || 0);
+      const prevRaf = countRafs.get(el);
+      if (prevRaf) cancelAnimationFrame(prevRaf);
+
+      const start = Number(el.dataset.count ?? 0);
+      el.dataset.count = String(end);
+
+      if (reducedMotion.matches || start === end) {
+        el.textContent = format(end);
+        return;
+      }
+
+      const duration = 420;
+      const t0 = performance.now();
+      function step(now) {
+        const p = Math.min(1, (now - t0) / duration);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = format(Math.round(start + (end - start) * eased));
+        if (p < 1) {
+          countRafs.set(el, requestAnimationFrame(step));
+        } else {
+          countRafs.delete(el);
+        }
+      }
+      countRafs.set(el, requestAnimationFrame(step));
+    }
 
     function scoreColor(score) {
       const s = Math.max(0, Math.min(10, Number(score) || 0));
@@ -146,14 +238,22 @@
     function renderScoreChart(el, buckets) {
       const maxCount = Math.max(1, ...buckets.map(b => b.count));
       const total = buckets.reduce((acc, b) => acc + b.count, 0);
-      if (!total) {
-        const li = document.createElement('li');
-        li.className = 'empty';
-        li.style.gridColumn = '1 / -1';
-        li.textContent = T.noData;
-        el.replaceChildren(li);
+
+      const existing = el.querySelectorAll(':scope > li.score-bar');
+      if (existing.length === buckets.length) {
+        buckets.forEach(({ score, count }, i) => {
+          const li = existing[i];
+          li.setAttribute('aria-label', `${T.scoreLabel.replace('{score}', score)}: ${fmtNum(count)} (${pct(count, total)})`);
+          li.title = `${score}/10: ${fmtNum(count)} (${pct(count, total)})`;
+          li.querySelector('.score-count').textContent = count ? fmtNum(count) : '0';
+          const fill = li.querySelector('.score-fill');
+          const heightPct = count ? Math.max(3, (count / maxCount) * 100) : 0;
+          fill.style.setProperty('--bar-pct', `${heightPct.toFixed(1)}%`);
+          fill.style.setProperty('--bar-color', scoreColor(score));
+        });
         return;
       }
+
       const items = buckets.map(({ score, count }) => {
         const li = document.createElement('li');
         li.className = 'score-bar';
@@ -181,6 +281,7 @@
         return li;
       });
       el.replaceChildren(...items);
+      setSiblingIndices(el);
     }
 
     function renderHbars(el, rows, maxOverride = null, color = '#8ab4ff') {
@@ -192,9 +293,33 @@
         return;
       }
       const maxVal = maxOverride || Math.max(1, ...rows.map(r => r.barValue ?? r.count));
+      const existingByKey = new Map();
+      el.querySelectorAll(':scope > li.hbar-row').forEach(li => {
+        if (li.dataset.key) existingByKey.set(li.dataset.key, li);
+      });
+
+      const pendingUpdates = [];
       const items = rows.map(row => {
+        const key = String(row.label);
+        const barVal = row.barValue ?? row.count;
+        const pctStr = `${Math.min(100, (barVal / maxVal) * 100).toFixed(1)}%`;
+        const barColor = row.color || color;
+
+        const reused = existingByKey.get(key);
+        if (reused) {
+          existingByKey.delete(key);
+          reused.querySelector('.hbar-val').textContent = row.valText;
+          const fill = reused.querySelector('.hbar-fill');
+          pendingUpdates.push(() => {
+            fill.style.setProperty('--bar-pct', pctStr);
+            fill.style.setProperty('--bar-color', barColor);
+          });
+          return reused;
+        }
+
         const li = document.createElement('li');
         li.className = 'hbar-row';
+        li.dataset.key = key;
 
         let nameEl;
         if (row.onClick) {
@@ -217,26 +342,61 @@
         track.className = 'hbar-track';
         const fill = document.createElement('div');
         fill.className = 'hbar-fill';
-        const barVal = row.barValue ?? row.count;
-        fill.style.setProperty('--bar-pct', `${Math.min(100, (barVal / maxVal) * 100).toFixed(1)}%`);
-        fill.style.setProperty('--bar-color', row.color || color);
+        fill.style.setProperty('--bar-pct', pctStr);
+        fill.style.setProperty('--bar-color', barColor);
         track.appendChild(fill);
 
         li.append(nameEl, val, track);
         return li;
       });
-      el.replaceChildren(...items);
+
+      const sameOrder = items.length === el.children.length && items.every((node, i) => node === el.children[i]);
+      if (!sameOrder) el.replaceChildren(...items);
+      setSiblingIndices(el);
+
+      if (pendingUpdates.length) {
+        if (sameOrder) {
+          pendingUpdates.forEach(fn => fn());
+        } else {
+          requestAnimationFrame(() => pendingUpdates.forEach(fn => fn()));
+        }
+      }
     }
 
     async function selectCatalog(catalog) {
-      $('catalogFilter').value = catalog;
+      const filterEl = $('catalogFilter');
+      const loader = $('statsLoader');
+      const body = $('statsBody');
+      const fromTopAlbums = document.activeElement && (
+        $('topAlbumsUserCard').contains(document.activeElement) ||
+        $('topAlbumsAiCard').contains(document.activeElement)
+      );
+
+      filterEl.value = catalog;
       const url = new URL(location.href);
       if (catalog) url.searchParams.set('catalog', catalog);
       else url.searchParams.delete('catalog');
       history.replaceState(null, '', url);
 
-      const res = await fetch('/api/statistics' + (catalog ? `?catalog=${encodeURIComponent(catalog)}` : ''));
-      if (res.ok) renderStats(await res.json());
+      const reqId = ++latestCatalogReq;
+      loader?.classList.add('is-loading');
+      body.setAttribute('aria-busy', 'true');
+
+      try {
+        const res = await fetch('/api/statistics' + (catalog ? `?catalog=${encodeURIComponent(catalog)}` : ''));
+        if (reqId !== latestCatalogReq) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (reqId !== latestCatalogReq) return;
+          renderStats(data);
+          if (fromTopAlbums && catalog) filterEl.focus();
+        }
+      } finally {
+        if (reqId === latestCatalogReq) {
+          loader?.classList.remove('is-loading');
+          body.removeAttribute('aria-busy');
+        }
+      }
     }
 
     function renderStats(data) {
@@ -245,24 +405,19 @@
       if (!data.databaseOpen) return;
 
       const s = data.summary;
-      $('tileTotal').textContent = fmtNum(s.total);
-      $('tileUserRated').textContent = fmtNum(s.userRated);
-      $('tileUserSub').textContent = s.userAvg != null
-        ? `${pct(s.userRated, s.total)} · ${T.avg} ${s.userAvg}`
-        : pct(s.userRated, s.total);
-      $('tileAiScored').textContent = fmtNum(s.aiScored);
-      $('tileAiSub').textContent = s.aiAvg != null
-        ? `${pct(s.aiScored, s.total)} · ${T.avg} ${s.aiAvg}`
-        : pct(s.aiScored, s.total);
-      $('tileFavorites').textContent = fmtNum(s.favorites);
-      $('tileHeroes').textContent = fmtNum(s.heroes);
-      $('tileCulls').textContent = fmtNum(s.culls);
+      const ratioFmt = v => `${fmtNum(v)}/${fmtNum(s.total)} (${pct(v, s.total)})`;
+      animateCount($('tileTotal'), s.total);
+      animateCount($('tileUserRated'), s.userRated, ratioFmt);
+      $('tileUserSub').textContent = s.userAvg != null ? `${T.avg} ${s.userAvg}` : '';
+      animateCount($('tileAiScored'), s.aiScored, ratioFmt);
+      $('tileAiSub').textContent = s.aiAvg != null ? `${T.avg} ${s.aiAvg}` : '';
+      animateCount($('tileFavorites'), s.favorites);
 
       renderScoreChart($('userRatingsChart'), data.userRatings);
       renderScoreChart($('aiScoresChart'), data.aiScores);
 
       const subs = data.aiSubscores || [];
-      $('aiSubSection').hidden = !subs.length;
+      setSectionVisible($('aiSubSection'), subs.length > 0);
       renderHbars($('aiSubscoresList'), subs.map(item => ({
         label: T.sub[item.key] || item.key,
         barValue: item.avg,
@@ -271,7 +426,8 @@
       })), 10);
 
       const showAlbums = !data.catalog;
-      $('topAlbumsSection').hidden = !showAlbums;
+      setSectionVisible($('topAlbumsUserCard'), showAlbums);
+      setSectionVisible($('topAlbumsAiCard'), showAlbums);
       if (showAlbums) {
         renderHbars($('topAlbumsUserList'), (data.topAlbumsUser || []).map(a => ({
           label: a.catalog,
@@ -327,6 +483,7 @@
     }
 
     $('catalogFilter').addEventListener('change', (e) => selectCatalog(e.target.value));
+    $('refreshStatsBtn').addEventListener('click', () => selectCatalog($('catalogFilter').value));
 
     renderStats(INITIAL_STATS);
   </script>
