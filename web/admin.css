@@ -226,24 +226,35 @@ button.primary { background: #2f4f8f; border-color: #3c63b0; }
 button:disabled { opacity: .5; cursor: default; }
 
 .segmented {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .35rem;
+  display: grid;
+  grid-template-columns: repeat(4, 5.1rem);
+  gap: .45rem;
 }
 
 .segmented button {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: .4rem;
+  justify-content: center;
+  gap: .35rem;
+  aspect-ratio: 1;
   background: #0d0d0f;
-  padding: .4rem .65rem;
-  font-size: .9rem;
+  padding: .4rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .segmented button .ico {
-  width: 1rem;
-  height: 1rem;
+  width: 1.4rem;
+  height: 1.4rem;
   flex: none;
+}
+
+@media (max-width: 480px) {
+  .segmented {
+    grid-template-columns: repeat(4, minmax(4.2rem, 1fr));
+  }
 }
 
 .segmented button[aria-checked="true"] {
