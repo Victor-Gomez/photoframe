@@ -282,9 +282,11 @@
     paintSlide();
 
     function paintThreshold() {
-      const disabled = !$('ratingThresholdEnabled').checked || segmentedValue('ratingFilter') === 'unscored';
-      $('ratingThresholdStepper').classList.toggle('disabled', disabled);
-      $('threshMinus').disabled = $('threshPlus').disabled = disabled;
+      const inactive = !$('ratingThresholdEnabled').checked || segmentedValue('ratingFilter') === 'unscored';
+      const val = Number($('ratingThreshold').textContent);
+      $('ratingThresholdStepper').classList.toggle('inactive', inactive);
+      $('threshMinus').disabled = val <= 0;
+      $('threshPlus').disabled = val >= 10;
     }
     paintThreshold();
 
@@ -371,6 +373,7 @@
       $(id).addEventListener('click', () => {
         const next = Math.max(0, Math.min(10, Number($('ratingThreshold').textContent) + delta));
         $('ratingThreshold').textContent = next;
+        paintThreshold();
         save({ ratingThreshold: next });
       });
     }

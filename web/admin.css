@@ -289,7 +289,7 @@ button:disabled { opacity: .5; cursor: default; }
   overflow: hidden;
 }
 
-.stepper.disabled { opacity: .4; }
+.stepper.inactive { opacity: .55; }
 
 .stepper button {
   border: 0;
