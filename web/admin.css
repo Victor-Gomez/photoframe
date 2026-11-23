@@ -238,7 +238,7 @@ button:disabled { opacity: .5; cursor: default; }
   justify-content: center;
   gap: .35rem;
   aspect-ratio: 1;
-  background: #23232a;
+  background: #17171a;
   padding: .4rem;
   font-size: .78rem;
   line-height: 1.1;
@@ -258,7 +258,7 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 .segmented button[aria-checked="true"] {
-  background: #2f4f8f;
+  background: #23232a;
   border-color: #3c63b0;
   color: #fff;
 }
