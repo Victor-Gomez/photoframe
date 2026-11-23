@@ -238,7 +238,7 @@ button:disabled { opacity: .5; cursor: default; }
   justify-content: center;
   gap: .35rem;
   aspect-ratio: 1;
-  background: #0d0d0f;
+  background: #23232a;
   padding: .4rem;
   font-size: .78rem;
   line-height: 1.1;
