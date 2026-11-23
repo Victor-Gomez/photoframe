@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="{{ lang }}">
+
+<head>
+  {% include "admin-head.html" %}
+</head>
+
+<body>
+  <main>
+    {% include "admin-header.html" %}
+    <h1 class="visually-hidden">{{ t('statistics.title') }}</h1>
+
+    <div class="stats-filter">
+      <label for="catalogFilter">{{ t('stats.catalogLabel') }}</label>
+      <select id="catalogFilter">
+        <option value="" {{ "selected" if not stats.catalog }}>{{ t('stats.allCatalogs') }}</option>
+        {% for cat in stats.catalogs %}
+        <option value="{{ cat }}" {{ "selected" if stats.catalog == cat }}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <p id="dbBusyNote" class="note bad" {{ "" if not stats.databaseOpen else "hidden" }}>{{ t('db.busy') }}</p>
+
+    <div id="statsBody" aria-live="polite" {{ "" if stats.databaseOpen else "hidden" }}>
+      <div class="tiles">
+        <div class="tile"><b id="tileTotal">—</b><span>{{ t('stats.totalPhotos') }}</span></div>
+        <div class="tile"><b id="tileUserRated">—</b><span id="tileUserSub">{{ t('stats.userRated') }}</span></div>
+        <div class="tile"><b id="tileAiScored">—</b><span id="tileAiSub">{{ t('stats.aiScored') }}</span></div>
+        <div class="tile"><b id="tileFavorites">—</b><span>{{ t('stats.favorites') }}</span></div>
+        <div class="tile"><b id="tileHeroes">—</b><span>{{ t('stats.heroes') }}</span></div>
+        <div class="tile"><b id="tileCulls">—</b><span>{{ t('stats.culls') }}</span></div>
+      </div>
+
+      <h2>{{ t('stats.h.userRatings') }}</h2>
+      <div class="stats-panel">
+        <ul id="userRatingsChart" class="score-chart"></ul>
+      </div>
+
+      <h2>{{ t('stats.h.aiScores') }}</h2>
+      <div class="stats-panel">
+        <ul id="aiScoresChart" class="score-chart"></ul>
+      </div>
+
+      <div id="aiSubSection">
+        <h2>{{ t('stats.h.aiSubscores') }}</h2>
+        <div class="stats-panel">
+          <ul id="aiSubscoresList" class="hbar-list"></ul>
+        </div>
+      </div>
+
+      <div id="topAlbumsSection" class="stats-grid">
+        <div>
+          <h2>{{ t('stats.h.topAlbumsUser') }}</h2>
+          <div class="stats-panel">
+            <ul id="topAlbumsUserList" class="hbar-list"></ul>
+          </div>
+        </div>
+        <div>
+          <h2>{{ t('stats.h.topAlbumsAi') }}</h2>
+          <div class="stats-panel">
+            <ul id="topAlbumsAiList" class="hbar-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div>
+          <h2>{{ t('stats.h.orientations') }}</h2>
+          <div class="stats-panel">
+            <ul id="orientationsList" class="hbar-list"></ul>
+          </div>
+        </div>
+        <div>
+          <h2>{{ t('stats.h.years') }}</h2>
+          <div class="stats-panel">
+            <ul id="yearsList" class="hbar-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div>
+          <h2>{{ t('stats.h.categories') }}</h2>
+          <div class="stats-panel">
+            <ul id="categoriesList" class="hbar-list"></ul>
+          </div>
+        </div>
+        <div>
+          <h2>{{ t('stats.h.cameras') }}</h2>
+          <div class="stats-panel">
+            <ul id="camerasList" class="hbar-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div>
+          <h2>{{ t('stats.h.people') }}</h2>
+          <div class="stats-panel">
+            <ul id="peopleList" class="hbar-list"></ul>
+          </div>
+        </div>
+        <div>
+          <h2>{{ t('stats.h.places') }}</h2>
+          <div class="stats-panel">
+            <ul id="placesList" class="hbar-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const INITIAL_STATS = {{ stats|tojson }};
+    const T = {{ js_text|tojson }};
+    const $ = id => document.getElementById(id);
+
+    function scoreColor(score) {
+      const s = Math.max(0, Math.min(10, Number(score) || 0));
+      if (s < 2) return '#ef4444';
+      if (s < 4) return '#f97316';
+      if (s < 5.5) return '#eab308';
+      if (s < 7) return '#a3e635';
+      if (s < 8.5) return '#84cc16';
+      return '#22c55e';
+    }
+
+    function fmtNum(n) {
+      return Number(n || 0).toLocaleString('es-ES');
+    }
+
+    function pct(part, total) {
+      if (!total) return '0%';
+      const val = (part * 100) / total;
+      return (val >= 10 || val === 0 ? val.toFixed(0) : val.toFixed(1)) + '%';
+    }
+
+    function avgSuffix(userAvg, aiAvg) {
+      const parts = [];
+      if (userAvg != null) parts.push(`★ ${userAvg}`);
+      if (aiAvg != null) parts.push(`AI ${aiAvg}`);
+      return parts.length ? ' · ' + parts.join(' · ') : '';
+    }
+
+    function renderScoreChart(el, buckets) {
+      const maxCount = Math.max(1, ...buckets.map(b => b.count));
+      const total = buckets.reduce((acc, b) => acc + b.count, 0);
+      if (!total) {
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.style.gridColumn = '1 / -1';
+        li.textContent = T.noData;
+        el.replaceChildren(li);
+        return;
+      }
+      const items = buckets.map(({ score, count }) => {
+        const li = document.createElement('li');
+        li.className = 'score-bar';
+        li.setAttribute('aria-label', `${T.scoreLabel.replace('{score}', score)}: ${fmtNum(count)} (${pct(count, total)})`);
+        li.title = `${score}/10: ${fmtNum(count)} (${pct(count, total)})`;
+
+        const countEl = document.createElement('span');
+        countEl.className = 'score-count';
+        countEl.textContent = count ? fmtNum(count) : '0';
+
+        const track = document.createElement('div');
+        track.className = 'score-track';
+        const fill = document.createElement('div');
+        fill.className = 'score-fill';
+        const heightPct = count ? Math.max(3, (count / maxCount) * 100) : 0;
+        fill.style.setProperty('--bar-pct', `${heightPct.toFixed(1)}%`);
+        fill.style.setProperty('--bar-color', scoreColor(score));
+        track.appendChild(fill);
+
+        const label = document.createElement('span');
+        label.className = 'score-label';
+        label.textContent = String(score);
+
+        li.append(countEl, track, label);
+        return li;
+      });
+      el.replaceChildren(...items);
+    }
+
+    function renderHbars(el, rows, maxOverride = null, color = '#8ab4ff') {
+      if (!rows.length) {
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.textContent = T.noData;
+        el.replaceChildren(li);
+        return;
+      }
+      const maxVal = maxOverride || Math.max(1, ...rows.map(r => r.barValue ?? r.count));
+      const items = rows.map(row => {
+        const li = document.createElement('li');
+        li.className = 'hbar-row';
+
+        let nameEl;
+        if (row.onClick) {
+          nameEl = document.createElement('button');
+          nameEl.type = 'button';
+          nameEl.className = 'album-btn';
+          nameEl.textContent = row.label;
+          nameEl.addEventListener('click', row.onClick);
+        } else {
+          nameEl = document.createElement('span');
+          nameEl.className = 'hbar-name';
+          nameEl.textContent = row.label;
+        }
+
+        const val = document.createElement('span');
+        val.className = 'hbar-val';
+        val.textContent = row.valText;
+
+        const track = document.createElement('div');
+        track.className = 'hbar-track';
+        const fill = document.createElement('div');
+        fill.className = 'hbar-fill';
+        const barVal = row.barValue ?? row.count;
+        fill.style.setProperty('--bar-pct', `${Math.min(100, (barVal / maxVal) * 100).toFixed(1)}%`);
+        fill.style.setProperty('--bar-color', row.color || color);
+        track.appendChild(fill);
+
+        li.append(nameEl, val, track);
+        return li;
+      });
+      el.replaceChildren(...items);
+    }
+
+    async function selectCatalog(catalog) {
+      $('catalogFilter').value = catalog;
+      const url = new URL(location.href);
+      if (catalog) url.searchParams.set('catalog', catalog);
+      else url.searchParams.delete('catalog');
+      history.replaceState(null, '', url);
+
+      const res = await fetch('/api/statistics' + (catalog ? `?catalog=${encodeURIComponent(catalog)}` : ''));
+      if (res.ok) renderStats(await res.json());
+    }
+
+    function renderStats(data) {
+      $('dbBusyNote').hidden = !!data.databaseOpen;
+      $('statsBody').hidden = !data.databaseOpen;
+      if (!data.databaseOpen) return;
+
+      const s = data.summary;
+      $('tileTotal').textContent = fmtNum(s.total);
+      $('tileUserRated').textContent = fmtNum(s.userRated);
+      $('tileUserSub').textContent = s.userAvg != null
+        ? `${pct(s.userRated, s.total)} · ${T.avg} ${s.userAvg}`
+        : pct(s.userRated, s.total);
+      $('tileAiScored').textContent = fmtNum(s.aiScored);
+      $('tileAiSub').textContent = s.aiAvg != null
+        ? `${pct(s.aiScored, s.total)} · ${T.avg} ${s.aiAvg}`
+        : pct(s.aiScored, s.total);
+      $('tileFavorites').textContent = fmtNum(s.favorites);
+      $('tileHeroes').textContent = fmtNum(s.heroes);
+      $('tileCulls').textContent = fmtNum(s.culls);
+
+      renderScoreChart($('userRatingsChart'), data.userRatings);
+      renderScoreChart($('aiScoresChart'), data.aiScores);
+
+      const subs = data.aiSubscores || [];
+      $('aiSubSection').hidden = !subs.length;
+      renderHbars($('aiSubscoresList'), subs.map(item => ({
+        label: T.sub[item.key] || item.key,
+        barValue: item.avg,
+        valText: `${item.avg} / 10`,
+        color: scoreColor(item.avg),
+      })), 10);
+
+      const showAlbums = !data.catalog;
+      $('topAlbumsSection').hidden = !showAlbums;
+      if (showAlbums) {
+        renderHbars($('topAlbumsUserList'), (data.topAlbumsUser || []).map(a => ({
+          label: a.catalog,
+          barValue: a.avg,
+          valText: `${a.avg} (${fmtNum(a.count)})`,
+          color: scoreColor(a.avg),
+          onClick: () => selectCatalog(a.catalog),
+        })), 10);
+        renderHbars($('topAlbumsAiList'), (data.topAlbumsAi || []).map(a => ({
+          label: a.catalog,
+          barValue: a.avg,
+          valText: `${a.avg} (${fmtNum(a.count)})`,
+          color: scoreColor(a.avg),
+          onClick: () => selectCatalog(a.catalog),
+        })), 10);
+      }
+
+      const orientTotal = s.landscape + s.portrait;
+      renderHbars($('orientationsList'), orientTotal ? [
+        { label: T.landscape, count: s.landscape, valText: `${fmtNum(s.landscape)} (${pct(s.landscape, orientTotal)})`, color: '#7bd88f' },
+        { label: T.portrait, count: s.portrait, valText: `${fmtNum(s.portrait)} (${pct(s.portrait, orientTotal)})`, color: '#8ab4ff' },
+      ] : []);
+
+      renderHbars($('yearsList'), data.years.map(y => ({
+        label: y.year,
+        count: y.count,
+        valText: `${fmtNum(y.count)} (${pct(y.count, s.total)})${avgSuffix(y.userAvg, y.aiAvg)}`,
+      })), null, '#a78bfa');
+
+      renderHbars($('categoriesList'), data.categories.map(c => ({
+        label: c.name,
+        count: c.count,
+        valText: `${fmtNum(c.count)} (${pct(c.count, s.total)})`,
+      })), null, '#38bdf8');
+
+      renderHbars($('camerasList'), data.cameras.map(c => ({
+        label: c.label,
+        count: c.count,
+        valText: `${fmtNum(c.count)} (${pct(c.count, s.total)})${avgSuffix(c.userAvg, c.aiAvg)}`,
+      })), null, '#f59e0b');
+
+      renderHbars($('peopleList'), (data.people || []).map(p => ({
+        label: p.name,
+        count: p.count,
+        valText: `${fmtNum(p.count)} (${pct(p.count, s.total)})`,
+      })), null, '#ec4899');
+
+      renderHbars($('placesList'), (data.places || []).map(p => ({
+        label: p.name,
+        count: p.count,
+        valText: `${fmtNum(p.count)} (${pct(p.count, s.total)})`,
+      })), null, '#14b8a6');
+    }
+
+    $('catalogFilter').addEventListener('change', (e) => selectCatalog(e.target.value));
+
+    renderStats(INITIAL_STATS);
+  </script>
+</body>
+
+</html>
