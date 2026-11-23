@@ -289,7 +289,19 @@ button:disabled { opacity: .5; cursor: default; }
   overflow: hidden;
 }
 
-.stepper.inactive { opacity: .55; }
+.stepper.inactive,
+.quiet-times.inactive { opacity: .55; }
+
+.quiet-times {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.quiet-times select {
+  min-width: 5.2rem;
+  font-variant-numeric: tabular-nums;
+}
 
 .stepper button {
   border: 0;

@@ -32,9 +32,11 @@
             <input type="checkbox" id="quietOn" {{ "checked" if settings.quietFrom and settings.quietTo }}>
             {{ t('quiet.from') }}
           </label>
-          <input type="time" id="quietFrom" value="{{ settings.quietFrom or '23:00' }}">
-          <span>{{ t('quiet.to') }}</span>
-          <input type="time" id="quietTo" value="{{ settings.quietTo or '07:00' }}">
+          <div class="quiet-times" id="quietTimes">
+            <select id="quietFrom" aria-label="{{ t('quiet.from') }}"></select>
+            <span>{{ t('quiet.to') }}</span>
+            <select id="quietTo" aria-label="{{ t('quiet.to') }}"></select>
+          </div>
         </div>
       </div>
 
@@ -249,8 +251,29 @@
 
     /* -- generales ---------------------------------------------------------- */
 
+    function fillTimeSelect(sel, current) {
+      const times = [];
+      for (let h = 0; h < 24; h++) {
+        for (const m of [0, 30]) {
+          times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        }
+      }
+      if (current && !times.includes(current)) {
+        times.push(current);
+        times.sort();
+      }
+      sel.replaceChildren(...times.map(v => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = v;
+        return opt;
+      }));
+      sel.value = current;
+    }
+    fillTimeSelect($('quietFrom'), {{ (settings.quietFrom or '23:00') | tojson }});
+    fillTimeSelect($('quietTo'), {{ (settings.quietTo or '07:00') | tojson }});
+
     function paintQuiet() {
-      $('quietFrom').disabled = $('quietTo').disabled = !$('quietOn').checked;
+      $('quietTimes').classList.toggle('inactive', !$('quietOn').checked);
     }
     paintQuiet();
 
@@ -389,8 +412,8 @@
       save({ quietFrom: on ? $('quietFrom').value : '', quietTo: on ? $('quietTo').value : '' });
     }
     $('quietOn').addEventListener('change', () => { paintQuiet(); saveQuiet(); });
-    $('quietFrom').addEventListener('change', saveQuiet);
-    $('quietTo').addEventListener('change', saveQuiet);
+    $('quietFrom').addEventListener('change', () => { if ($('quietOn').checked) saveQuiet(); });
+    $('quietTo').addEventListener('change', () => { if ($('quietOn').checked) saveQuiet(); });
 
     /* -- este dispositivo --------------------------------------------------- */
 
