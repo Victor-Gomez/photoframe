@@ -312,6 +312,16 @@ button:disabled { opacity: .5; cursor: default; }
   min-width: 2.2rem;
 }
 
+@media (hover: hover) {
+  .stepper button:not(:disabled):hover {
+    background: #23232a;
+  }
+}
+
+.stepper button:not(:disabled):active {
+  background: #2a2a33;
+}
+
 .stepper span {
   min-width: 2.6rem;
   padding: 0 .25rem;
