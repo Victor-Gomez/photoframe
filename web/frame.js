@@ -815,10 +815,14 @@
     menu.style.top = `${top}px`;
   }
 
+  const openGalleryBtn = document.getElementById('open-gallery');
+  const openInfoBtn = document.getElementById('open-info');
+  const openNewtabBtn = document.getElementById('open-newtab');
+
   async function openMenu(viaContext, x, y) {
-    if (!currentId) return;
     menuOpen = true;
     menuId = currentId;  // pin it: the menu acts on the photo that was on screen
+    const hasPhoto = !!menuId;
     menu.hidden = false;
     // Fullscreen and favorite are in the top bar, redundant when the ⋮ was tapped; a
     // right-click has no bar under it, so it gets them in the menu.
@@ -830,9 +834,18 @@
     document.body.classList.add('menu-open');
     document.getElementById('more').setAttribute('aria-expanded', 'true');
 
-    caption.textContent = '…';
     hidePhoto.disabled = true;
+    openGalleryBtn.disabled = !hasPhoto;
+    openInfoBtn.disabled = !hasPhoto;
+    openNewtabBtn.disabled = !hasPhoto;
     hideFolders.replaceChildren();
+    if (!hasPhoto) {
+      caption.textContent = t('noPhotos');
+      if (menuAt) positionMenuAt(menuAt.x, menuAt.y);
+      return;
+    }
+
+    caption.textContent = '…';
     try {
       const res = await fetch(`/api/photo/${menuId}`, { cache: 'no-store' });
       const info = await res.json();
@@ -990,7 +1003,7 @@
   // A right-click opens the same menu, plus the two controls the top bar would otherwise
   // carry. Not over the gallery or info panels — those keep the browser's own menu.
   addEventListener('contextmenu', e => {
-    if (galleryOpen || infoOpen || !currentId) return;
+    if (galleryOpen || infoOpen) return;
     e.preventDefault();
     if (menuOpen) closeMenu();
     openMenu(true, e.clientX, e.clientY);
@@ -1007,6 +1020,7 @@
     const fav = menuFavorite.querySelector('span');
     fav.dataset.t = isFavorite ? 'ui.favoriteRemove' : 'ui.favoriteAdd';
     fav.textContent = t(fav.dataset.t);
+    menuFavorite.disabled = !currentId;
     menuFavorite.setAttribute('aria-pressed', isFavorite ? 'true' : 'false');
     menuFavorite.querySelector('.ico').classList.toggle('filled', isFavorite);
   }
