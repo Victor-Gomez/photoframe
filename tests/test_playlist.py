@@ -243,3 +243,7 @@ def test_orientation_filter_controls_which_shapes_are_served(make_app):
     assert client.post("/api/settings", json={"orientationFilter": "portrait"}).status_code == 200
     port_ids = set(client.get("/api/playlist?ratio=1.78").get_json()["ids"])
     assert p_port in port_ids and p_land not in port_ids
+
+    # /api/playlist/count matches the filtered playlist length without allocating a pass.
+    cnt = client.get("/api/playlist/count?ratio=1.78").get_json()["count"]
+    assert cnt == len(port_ids)

@@ -35,30 +35,42 @@
       </div>
 
       <div class="field">
-        <label for="language">{{ t('row.language') }}</label>
+        <label id="languageLabel">{{ t('row.language') }}</label>
         <div class="controls">
-          <select id="language">
+          <div class="segmented" id="language" role="radiogroup" aria-labelledby="languageLabel">
             {% for code, name in languages.items() %}
-            <option value="{{ code }}" {{ "selected" if settings.language == code }}>{{ name }}</option>
+            <button type="button" role="radio" data-value="{{ code }}" aria-checked="{{ 'true' if settings.language == code else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              <span>{{ name }}</span>
+            </button>
             {% endfor %}
-          </select>
+          </div>
         </div>
       </div>
 
       <div class="field">
-        <label for="logLevel">{{ t('row.logLevel') }}
+        <label id="logLevelLabel">{{ t('row.logLevel') }}
           <small>{{ t('hint.logLevel') }}</small></label>
         <div class="controls">
-          <select id="logLevel">
-            {% for level in logLevels %}
-            <option value="{{ level }}" {{ "selected" if settings.logLevel == level }}>{{ t('log.' + level) }}</option>
-            {% endfor %}
-          </select>
+          <div class="segmented" id="logLevel" role="radiogroup" aria-labelledby="logLevelLabel">
+            <button type="button" role="radio" data-value="off" aria-checked="{{ 'true' if settings.logLevel == 'off' else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M17 17H4a1 1 0 0 1-.74-1.673C4.59 13.956 6 12.499 6 8a6 6 0 0 1 .258-1.742"/><path d="m2 2 20 20"/><path d="M8.668 3.01A6 6 0 0 1 18 8c0 2.687.77 4.653 1.707 6.05"/></svg>
+              <span>{{ t('log.off') }}</span>
+            </button>
+            <button type="button" role="radio" data-value="error" aria-checked="{{ 'true' if settings.logLevel == 'error' else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+              <span>{{ t('log.error') }}</span>
+            </button>
+            <button type="button" role="radio" data-value="info" aria-checked="{{ 'true' if settings.logLevel == 'info' else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+              <span>{{ t('log.info') }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </fieldset>
 
-    <h2>{{ t('h.device') }}</h2>
+    <h2>{{ t('h.device') }} <span id="matchCount" class="match-count" hidden></span></h2>
     <p class="note">{{ t('device.note') }}</p>
     <fieldset>
       <div class="field">
@@ -102,13 +114,17 @@
       </div>
 
       <div class="field">
-        <label for="ratingThreshold">{{ t('row.ratingThreshold') }}
+        <label id="ratingThresholdLabel">{{ t('row.ratingThreshold') }}
           <small>{{ t('hint.ratingThreshold') }}</small></label>
         <div class="controls">
           <label class="switch">
             <input type="checkbox" id="ratingThresholdEnabled" {{ "checked" if settings.ratingThresholdEnabled }}>
           </label>
-          <input type="number" id="ratingThreshold" min="0" max="10" value="{{ settings.ratingThreshold }}">
+          <div class="stepper" id="ratingThresholdStepper">
+            <button type="button" id="threshMinus" aria-label="−">−</button>
+            <span id="ratingThreshold">{{ settings.ratingThreshold }}</span>
+            <button type="button" id="threshPlus" aria-label="+">+</button>
+          </div>
         </div>
       </div>
 
@@ -168,26 +184,41 @@
         </div>
       </div>
       <div class="field">
-        <label for="imageMode">{{ t('row.images') }}
+        <label id="imageModeLabel">{{ t('row.images') }}
           <small id="deviceNote"></small></label>
         <div class="controls">
-          <select id="imageMode">
-            <option value="auto">{{ t('images.auto') }}</option>
-            <option value="1">{{ t('images.originals') }}</option>
-            <option value="0">{{ t('images.reencoded') }}</option>
-          </select>
+          <div class="segmented" id="imageMode" role="radiogroup" aria-labelledby="imageModeLabel">
+            <button type="button" role="radio" data-value="auto" aria-checked="false">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg>
+              <span>{{ t('images.autoShort') }}</span>
+            </button>
+            <button type="button" role="radio" data-value="1" aria-checked="false">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              <span>{{ t('images.originalsShort') }}</span>
+            </button>
+            <button type="button" role="radio" data-value="0" aria-checked="false">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+              <span>{{ t('images.reencodedShort') }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
       <div class="field">
-        <label for="deviceLanguage">{{ t('row.deviceLanguage') }}</label>
+        <label id="deviceLanguageLabel">{{ t('row.deviceLanguage') }}</label>
         <div class="controls">
-          <select id="deviceLanguage">
-            <option value="">{{ t('language.asFrame') }}</option>
+          <div class="segmented" id="deviceLanguage" role="radiogroup" aria-labelledby="deviceLanguageLabel">
+            <button type="button" role="radio" data-value="" aria-checked="{{ 'true' if not deviceLanguage else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-3.96 3.15"/><path d="M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/></svg>
+              <span>{{ t('language.asFrame') }}</span>
+            </button>
             {% for code, name in languages.items() %}
-            <option value="{{ code }}" {{ "selected" if deviceLanguage == code }}>{{ name }}</option>
+            <button type="button" role="radio" data-value="{{ code }}" aria-checked="{{ 'true' if deviceLanguage == code else 'false' }}">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              <span>{{ name }}</span>
+            </button>
             {% endfor %}
-          </select>
+          </div>
         </div>
       </div>
     </fieldset>
@@ -231,9 +262,25 @@
     }
 
     function paintThreshold() {
-      $('ratingThreshold').disabled = !$('ratingThresholdEnabled').checked || segmentedValue('ratingFilter') === 'unscored';
+      const disabled = !$('ratingThresholdEnabled').checked || segmentedValue('ratingFilter') === 'unscored';
+      $('ratingThresholdStepper').classList.toggle('disabled', disabled);
+      $('threshMinus').disabled = $('threshPlus').disabled = disabled;
     }
     paintThreshold();
+
+    async function refreshCount() {
+      const badge = $('matchCount');
+      try {
+        const ratio = (innerWidth / (innerHeight || 1)).toFixed(4);
+        const res = await fetch(`/api/playlist/count?ratio=${ratio}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const { count } = await res.json();
+        badge.textContent = count === 1 ? TEXT.matchOne : TEXT.matchCount.replace('{count}', count);
+        badge.classList.toggle('bad', count === 0);
+        badge.hidden = false;
+      } catch { /* ignore transient network error */ }
+    }
+    refreshCount();
 
     async function save(patch) {
       try {
@@ -250,17 +297,20 @@
         $('showRating').checked = !!body.showRating;
         paintSegmented('ratingFilter', body.ratingFilter);
         $('ratingThresholdEnabled').checked = !!body.ratingThresholdEnabled;
-        $('ratingThreshold').value = body.ratingThreshold;
+        $('ratingThreshold').textContent = body.ratingThreshold;
         paintThreshold();
         $('folderFilter').value = body.folderFilter;
         paintSegmented('imageFit', body.imageFit);
         paintSegmented('orientationFilter', body.orientationFilter);
+        paintSegmented('language', body.language);
+        paintSegmented('logLevel', body.logLevel);
         // The page is rendered by the server, so its own language changes on reload — and
         // the page coming back in the new language is the acknowledgement.
         if ('language' in patch && body.language !== TEXT.language && !TEXT.deviceLanguage) {
           location.reload();
           return;
         }
+        refreshCount();
         toast(TEXT.saved);
       } catch (err) {
         toast(String(err.message || err), true);
@@ -268,36 +318,33 @@
       }
     }
 
+    function bindSegmented(id, onSelect) {
+      $(id).addEventListener('click', e => {
+        const btn = e.target.closest('button[data-value]');
+        if (!btn) return;
+        const val = btn.dataset.value;
+        paintSegmented(id, val);
+        onSelect(val);
+      });
+    }
+
     $('slideSeconds').addEventListener('change', () => save({ slideSeconds: +$('slideSeconds').value }));
     $('weightByRating').addEventListener('change', () => save({ weightByRating: $('weightByRating').checked }));
     $('showRating').addEventListener('change', () => save({ showRating: $('showRating').checked }));
-    $('ratingFilter').addEventListener('click', e => {
-      const btn = e.target.closest('button[data-value]');
-      if (!btn) return;
-      const val = btn.dataset.value;
-      paintSegmented('ratingFilter', val);
-      paintThreshold();
-      save({ ratingFilter: val });
-    });
+    bindSegmented('ratingFilter', val => { paintThreshold(); save({ ratingFilter: val }); });
     $('ratingThresholdEnabled').addEventListener('change', () => { paintThreshold(); save({ ratingThresholdEnabled: $('ratingThresholdEnabled').checked }); });
-    $('ratingThreshold').addEventListener('change', () => save({ ratingThreshold: +$('ratingThreshold').value }));
+    for (const [id, delta] of [['threshMinus', -1], ['threshPlus', 1]]) {
+      $(id).addEventListener('click', () => {
+        const next = Math.max(0, Math.min(10, Number($('ratingThreshold').textContent) + delta));
+        $('ratingThreshold').textContent = next;
+        save({ ratingThreshold: next });
+      });
+    }
     $('folderFilter').addEventListener('change', () => save({ folderFilter: $('folderFilter').value }));
-    $('imageFit').addEventListener('click', e => {
-      const btn = e.target.closest('button[data-value]');
-      if (!btn) return;
-      const val = btn.dataset.value;
-      paintSegmented('imageFit', val);
-      save({ imageFit: val });
-    });
-    $('orientationFilter').addEventListener('click', e => {
-      const btn = e.target.closest('button[data-value]');
-      if (!btn) return;
-      const val = btn.dataset.value;
-      paintSegmented('orientationFilter', val);
-      save({ orientationFilter: val });
-    });
-    $('language').addEventListener('change', () => save({ language: $('language').value }));
-    $('logLevel').addEventListener('change', () => save({ logLevel: $('logLevel').value }));
+    bindSegmented('imageFit', val => save({ imageFit: val }));
+    bindSegmented('orientationFilter', val => save({ orientationFilter: val }));
+    bindSegmented('language', val => save({ language: val }));
+    bindSegmented('logLevel', val => save({ logLevel: val }));
 
     // Both ends together: half a window is not a window, and the server says so.
     function saveQuiet() {
@@ -319,10 +366,9 @@
 
     let stored = null;
     try { stored = localStorage.getItem('frameFull'); } catch { /* storage disabled */ }
-    $('imageMode').value = stored === null ? 'auto' : stored;
+    paintSegmented('imageMode', stored === null ? 'auto' : stored);
 
-    $('imageMode').addEventListener('change', () => {
-      const wanted = $('imageMode').value;
+    bindSegmented('imageMode', wanted => {
       try {
         if (wanted === 'auto') localStorage.removeItem('frameFull');
         else localStorage.setItem('frameFull', wanted);
@@ -334,8 +380,7 @@
 
     // A cookie, not localStorage: /status and this page are rendered by the server, and
     // only a cookie reaches it in time to render them in this device's language.
-    $('deviceLanguage').addEventListener('change', () => {
-      const wanted = $('deviceLanguage').value;
+    bindSegmented('deviceLanguage', wanted => {
       document.cookie = wanted
         ? `frame_lang=${wanted}; path=/; max-age=31536000; samesite=lax`
         : 'frame_lang=; path=/; max-age=0; samesite=lax';

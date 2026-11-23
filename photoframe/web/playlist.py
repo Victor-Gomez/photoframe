@@ -57,36 +57,7 @@ def blueprint(frame):
             **extra,
         )
 
-    @bp.get("/api/playlist")
-    def playlist():
-        """A full shuffled pass, so nothing repeats until everything has shown.
-
-        `?ratio=1.78` — the client's own width/height — is read only for its orientation.
-        `?orientation=landscape|portrait` says the same directly. Neither means the whole
-        library. Favourites are not a separate mode: they appear `favoriteWeight` times.
-        """
-        dev_prefs = prefs.for_device(device_id_from(request))
-        limit = request.args.get("limit", type=int)
-        limit = PAGE_DEFAULT if limit is None else max(0, limit)
-
-        # Paging through a pass already built: no reshuffle, no rebuild, just a slice.
-        token = request.args.get("token", "")
-        if token:
-            existing = library.passes.get(token)
-            if existing is not None:
-                offset = max(0, request.args.get("offset", type=int) or 0)
-                return page_of(token, existing, offset, limit, dev_prefs, photos=len(existing))
-
-        want = request.args.get("orientation", "").lower()
-        try:
-            screen = float(request.args.get("ratio", 0))
-            # "nan" and "inf" parse happily as floats and a negative is meaningless; all of
-            # them mean "no ratio given" rather than a filter that silently does nothing.
-            if not math.isfinite(screen) or screen <= 0:
-                screen = 0.0
-        except ValueError:
-            screen = 0.0
-
+    def filtered_ids(dev_prefs: dict, screen: float, want: str = "") -> tuple[list[str], str, str]:
         ofilter = dev_prefs["orientationFilter"]
         matched_on = "none"
         if want in ORIENTATIONS:
@@ -134,6 +105,49 @@ def blueprint(frame):
                 thresh = dev_prefs["ratingThreshold"]
                 ids = [pid for pid in ids
                        if (r := library.rating_of(pid)) is None or r >= thresh]
+        return ids, want, matched_on
+
+    def parse_screen() -> float:
+        try:
+            screen = float(request.args.get("ratio", 0))
+            # "nan" and "inf" parse happily as floats and a negative is meaningless; all of
+            # them mean "no ratio given" rather than a filter that silently does nothing.
+            return screen if math.isfinite(screen) and screen > 0 else 0.0
+        except ValueError:
+            return 0.0
+
+    @bp.get("/api/playlist/count")
+    def playlist_count():
+        dev_prefs = prefs.for_device(device_id_from(request))
+        ids, _, _ = filtered_ids(dev_prefs, parse_screen())
+        return jsonify(count=len(ids))
+
+    @bp.get("/api/playlist")
+    def playlist():
+        """A full shuffled pass, so nothing repeats until everything has shown.
+
+        `?ratio=1.78` — the client's own width/height — is read only for its orientation.
+        `?orientation=landscape|portrait` says the same directly. Neither means the whole
+        library. Favourites are not a separate mode: they appear `favoriteWeight` times.
+        """
+        dev_prefs = prefs.for_device(device_id_from(request))
+        limit = request.args.get("limit", type=int)
+        limit = PAGE_DEFAULT if limit is None else max(0, limit)
+
+        # Paging through a pass already built: no reshuffle, no rebuild, just a slice.
+        token = request.args.get("token", "")
+        if token:
+            existing = library.passes.get(token)
+            if existing is not None:
+                offset = max(0, request.args.get("offset", type=int) or 0)
+                return page_of(token, existing, offset, limit, dev_prefs, photos=len(existing))
+
+        want = request.args.get("orientation", "").lower()
+        screen = parse_screen()
+        ids, want, matched_on = filtered_ids(dev_prefs, screen, want)
+        ofilter = dev_prefs["orientationFilter"]
+        rfilter = dev_prefs["ratingFilter"]
+        relatives = library.rel_lower_map()
 
         favorite = rules.favorite_check()   # one snapshot for the whole pass
         favorites = {pid for pid in ids if favorite(relatives.get(pid, ""), pid)}

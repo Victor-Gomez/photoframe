@@ -54,6 +54,8 @@ def blueprint(frame):
                 "noStorage": t("device.nostorage"),
                 "originals": t("images.originals"),
                 "reencoded": t("images.reencoded"),
+                "matchCount": t("settings.matchCount", count="{count}"),
+                "matchOne": t("settings.matchOne"),
                 # Handed over with its placeholders intact, for the script to fill in.
                 "guess": t("device.guess", choice="{choice}", cores="{cores}", memory="{memory}"),
             },

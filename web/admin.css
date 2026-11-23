@@ -228,6 +228,7 @@ button:disabled { opacity: .5; cursor: default; }
 .segmented {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: .45rem;
 }
 
@@ -253,6 +254,9 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 @media (max-width: 480px) {
+  .segmented {
+    justify-content: flex-start;
+  }
   .segmented button {
     width: 4.4rem;
     height: 4.4rem;
@@ -274,6 +278,49 @@ button:disabled { opacity: .5; cursor: default; }
     background: #2a2a33;
     border-color: #525260;
   }
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  background: #17171a;
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  overflow: hidden;
+}
+
+.stepper.disabled { opacity: .4; }
+
+.stepper button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: .42rem .75rem;
+  font-weight: 600;
+  min-width: 2.2rem;
+}
+
+.stepper span {
+  min-width: 2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-count {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--dim);
+  background: #17171a;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .15rem .6rem;
+  margin-left: .5rem;
+  vertical-align: middle;
+}
+
+.match-count.bad {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, .4);
 }
 
 .actions {
