@@ -670,6 +670,7 @@
   let activeRatingThresholdEnabled = null;
   let activeRatingThreshold = null;
   let activeFolderFilter = null;
+  let activeOrientationFilter = null;
   let activeWeightByRating = null;
   let showRating = false;
   let currentRating = null;
@@ -707,15 +708,17 @@
         Boolean(data.ratingThresholdEnabled) !== activeRatingThresholdEnabled ||
         data.ratingThreshold !== activeRatingThreshold ||
         data.folderFilter !== activeFolderFilter ||
+        data.orientationFilter !== activeOrientationFilter ||
         Boolean(data.weightByRating) !== activeWeightByRating
       )) {
-        // Rating, folder, or weighting changed on /settings: force a fresh playlist on the next advance.
+        // Rating, folder, orientation, or weighting changed on /settings: force a fresh playlist on the next advance.
         cursor = ids.length;
       }
       activeRatingFilter = data.ratingFilter;
       activeRatingThresholdEnabled = Boolean(data.ratingThresholdEnabled);
       activeRatingThreshold = data.ratingThreshold;
       activeFolderFilter = data.folderFilter;
+      activeOrientationFilter = data.orientationFilter;
       activeWeightByRating = Boolean(data.weightByRating);
       showRating = Boolean(data.showRating);
       renderRatingBadge(cornerRating, showRating ? currentRating : null);

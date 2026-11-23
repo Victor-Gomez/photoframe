@@ -33,6 +33,7 @@ DEVICE_KEYS = frozenset({
     "ratingThreshold",
     "folderFilter",
     "imageFit",
+    "orientationFilter",
 })
 
 
@@ -64,11 +65,13 @@ BOOLEANS = ("weightByRating", "showRating", "ratingThresholdEnabled")
 LOG_LEVELS = ("off", "error", "info")
 RATING_FILTERS = ("all", "above", "unscored")
 IMAGE_FITS = ("cover", "fit")
+ORIENTATION_FILTERS = ("any", "device", "landscape", "portrait")
 CHOICES = {
     "language": LANGUAGES,
     "logLevel": LOG_LEVELS,
     "ratingFilter": RATING_FILTERS,
     "imageFit": IMAGE_FITS,
+    "orientationFilter": ORIENTATION_FILTERS,
 }
 
 
@@ -148,6 +151,7 @@ class Preferences:
             "ratingThreshold": self.settings.rating_threshold,
             "folderFilter": self.settings.folder_filter,
             "imageFit": self.settings.image_fit,
+            "orientationFilter": self.settings.orientation_filter,
             "quietFrom": "",
             "quietTo": "",
             "language": self.settings.language,
@@ -241,6 +245,10 @@ class Preferences:
     @property
     def image_fit(self) -> str:
         return self["imageFit"]
+
+    @property
+    def orientation_filter(self) -> str:
+        return self["orientationFilter"]
 
     @property
     def language(self) -> str:

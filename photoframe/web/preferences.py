@@ -12,6 +12,7 @@ from .. import i18n
 from ..preferences import (
     IMAGE_FITS,
     LOG_LEVELS,
+    ORIENTATION_FILTERS,
     RATING_FILTERS,
     device_id_from,
     resolve_device,
@@ -40,7 +41,8 @@ def blueprint(frame):
             "settings.html",
             tab="settings",
             t=t, lang=language, languages=i18n.NAMES, logLevels=LOG_LEVELS,
-            ratingFilters=RATING_FILTERS, imageFits=IMAGE_FITS, folders=folders,
+            ratingFilters=RATING_FILTERS, imageFits=IMAGE_FITS,
+            orientationFilters=ORIENTATION_FILTERS, folders=folders,
             settings=dev_prefs, db=frame.db.state(),
             # Empty means this device has not asked for one and follows the frame.
             deviceLanguage=request.cookies.get(i18n.COOKIE, ""),

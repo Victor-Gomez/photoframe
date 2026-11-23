@@ -28,6 +28,7 @@ DEFAULTS = {
     "ratingThreshold": 5,
     "folderFilter": "",
     "imageFit": "cover",
+    "orientationFilter": "device",
     "jpegQuality": 85,
     "encodeThreads": 2,
     # Megabytes of rendered JPEGs held in memory. 0 turns the cache off entirely.
@@ -71,6 +72,9 @@ class Settings:
         self.image_fit = self("imageFit", "IMAGE_FIT").strip().lower()
         if self.image_fit not in ("cover", "fit"):
             self.image_fit = "cover"
+        self.orientation_filter = self("orientationFilter", "ORIENTATION_FILTER").strip().lower()
+        if self.orientation_filter not in ("any", "device", "landscape", "portrait"):
+            self.orientation_filter = "device"
         self.jpeg_quality = min(95, max(40, self("jpegQuality", "JPEG_QUALITY", int)))
         self.encode_threads = max(1, self("encodeThreads", "ENCODE_THREADS", int))
         self.cache_budget = max(0, self("renderCacheMB", "RENDER_CACHE_MB", int)) * 1024 * 1024

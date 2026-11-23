@@ -216,3 +216,30 @@ def test_folder_filter_restricts_playlist_to_matching_folder(make_app):
     assert client.post("/api/settings", json={"folderFilter": ""}).status_code == 200
     unfiltered = set(client.get("/api/playlist").get_json()["ids"])
     assert {p_day1_a, p_day1_b, p_day2, p_root} <= unfiltered
+
+
+def test_orientation_filter_controls_which_shapes_are_served(make_app):
+    app = make_app()
+    client = app.app.test_client()
+    p_land = photo_id_of("Trip/Day1/beach.avif")
+    p_port = photo_id_of("Trip/Day1/tower.avif")
+    p_square = photo_id_of("Trip/Day2/square.avif")
+
+    # Default is "device": ?ratio=1.78 (landscape) keeps landscape + near-square, drops portrait.
+    dev_ids = set(client.get("/api/playlist?ratio=1.78").get_json()["ids"])
+    assert p_land in dev_ids and p_square in dev_ids and p_port not in dev_ids
+
+    # "any": ignores device ratio and returns all orientations.
+    assert client.post("/api/settings", json={"orientationFilter": "any"}).status_code == 200
+    any_ids = set(client.get("/api/playlist?ratio=1.78").get_json()["ids"])
+    assert {p_land, p_port, p_square} <= any_ids
+
+    # "landscape": only horizontal photos regardless of device ratio.
+    assert client.post("/api/settings", json={"orientationFilter": "landscape"}).status_code == 200
+    land_ids = set(client.get("/api/playlist?ratio=0.56").get_json()["ids"])
+    assert p_land in land_ids and p_port not in land_ids
+
+    # "portrait": only vertical photos regardless of device ratio.
+    assert client.post("/api/settings", json={"orientationFilter": "portrait"}).status_code == 200
+    port_ids = set(client.get("/api/playlist?ratio=1.78").get_json()["ids"])
+    assert p_port in port_ids and p_land not in port_ids

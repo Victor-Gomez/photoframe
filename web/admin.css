@@ -225,6 +225,33 @@ button.primary { background: #2f4f8f; border-color: #3c63b0; }
 
 button:disabled { opacity: .5; cursor: default; }
 
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  background: #0d0d0f;
+  padding: .4rem .65rem;
+  font-size: .9rem;
+}
+
+.segmented button .ico {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.segmented button[aria-checked="true"] {
+  background: #2f4f8f;
+  border-color: #3c63b0;
+  color: #fff;
+}
+
 .actions {
   display: flex;
   align-items: center;

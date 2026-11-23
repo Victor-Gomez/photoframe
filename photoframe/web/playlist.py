@@ -87,16 +87,24 @@ def blueprint(frame):
         except ValueError:
             screen = 0.0
 
+        ofilter = dev_prefs["orientationFilter"]
         matched_on = "none"
-        if screen > 0:
-            # Orientation, not a band around the exact ratio: matching more finely just
-            # sorts the library by the shape of the camera that took each photo.
-            want = want if want in ORIENTATIONS else orientation_from(screen)
-            items = library.matching(want)
-            matched_on = "orientation"
-        elif want in ORIENTATIONS:
+        if want in ORIENTATIONS:
             # Asked for by name, so taken literally: no near-square photos folded in.
             items = library.matching(want, squares=False)
+            matched_on = "orientation"
+        elif ofilter == "any":
+            items = library.items()
+            want = "any"
+        elif ofilter in ORIENTATIONS:
+            items = library.matching(ofilter, squares=False)
+            want = ofilter
+            matched_on = "orientation"
+        elif screen > 0:
+            # Orientation, not a band around the exact ratio: matching more finely just
+            # sorts the library by the shape of the camera that took each photo.
+            want = orientation_from(screen)
+            items = library.matching(want)
             matched_on = "orientation"
         else:
             items = library.items()
@@ -142,6 +150,7 @@ def blueprint(frame):
             ratingThresholdEnabled=dev_prefs["ratingThresholdEnabled"],
             ratingThreshold=dev_prefs["ratingThreshold"],
             folderFilter=dev_prefs["folderFilter"],
+            orientationFilter=ofilter,
             ratio=screen or None,
             matchedOn=matched_on,
             orientation=want if want in ORIENTATIONS else "any",
