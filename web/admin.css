@@ -263,6 +263,17 @@ button:disabled { opacity: .5; cursor: default; }
   color: #fff;
 }
 
+@media (hover: hover) {
+  .segmented button:hover {
+    background: #1d1d22;
+    border-color: #363640;
+  }
+  .segmented button[aria-checked="true"]:hover {
+    background: #2a2a33;
+    border-color: #525260;
+  }
+}
+
 .actions {
   display: flex;
   align-items: center;
