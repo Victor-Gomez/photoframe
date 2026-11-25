@@ -120,6 +120,36 @@
       </div>
 
       <div class="field">
+        <label for="autoHideHud">{{ t('row.autoHideHud') }}
+          <small>{{ t('hint.autoHideHud') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="autoHideHud" {{ "checked" if settings.autoHideHud }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="kenBurns">{{ t('row.kenBurns') }}
+          <small>{{ t('hint.kenBurns') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="kenBurns" {{ "checked" if settings.kenBurns }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="debug">{{ t('row.debug') }}
+          <small>{{ t('hint.debug') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="debug" {{ "checked" if settings.debug }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
         <label id="ratingFilterLabel">{{ t('row.ratingFilter') }}</label>
         <div class="controls">
           <div class="segmented" id="ratingFilter" role="radiogroup" aria-labelledby="ratingFilterLabel">
@@ -408,6 +438,9 @@
         $('showRating').checked = !!body.showRating;
         $('showClock').checked = !!body.showClock;
         $('showPath').checked = !!body.showPath;
+        $('autoHideHud').checked = !!body.autoHideHud;
+        $('kenBurns').checked = !!body.kenBurns;
+        $('debug').checked = !!body.debug;
         paintSegmented('ratingFilter', body.ratingFilter);
         $('ratingThresholdEnabled').checked = !!body.ratingThresholdEnabled;
         $('ratingThreshold').textContent = body.ratingThreshold;
@@ -459,6 +492,9 @@
     $('showRating').addEventListener('change', () => save({ showRating: $('showRating').checked }));
     $('showClock').addEventListener('change', () => save({ showClock: $('showClock').checked }));
     $('showPath').addEventListener('change', () => save({ showPath: $('showPath').checked }));
+    $('autoHideHud').addEventListener('change', () => save({ autoHideHud: $('autoHideHud').checked }));
+    $('kenBurns').addEventListener('change', () => save({ kenBurns: $('kenBurns').checked }));
+    $('debug').addEventListener('change', () => save({ debug: $('debug').checked }));
     bindSegmented('ratingFilter', val => { paintThreshold(); save({ ratingFilter: val }); });
     $('ratingThresholdEnabled').addEventListener('change', () => { paintThreshold(); save({ ratingThresholdEnabled: $('ratingThresholdEnabled').checked }); });
     for (const [id, delta] of [['threshMinus', -1], ['threshPlus', 1]]) {

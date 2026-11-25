@@ -341,3 +341,31 @@ def test_arp_mac_resolves_device_across_dhcp_ip_changes(app, monkeypatch):
     assert c2.get("/api/settings").get_json()["showPath"] is False
     page = c2.get("/settings", environ_base={"REMOTE_ADDR": "192.168.1.99"}).get_data(as_text=True)
     assert "Identificado por MAC (2c:f0:5d:a2:68:bd)" in page
+
+
+def test_auto_hide_hud_is_per_device(app):
+    dev_a = app.app.test_client()
+    dev_b = app.app.test_client()
+    assert dev_a.get("/").status_code == 200
+    assert dev_b.get("/").status_code == 200
+
+    assert dev_a.get("/api/settings").get_json()["autoHideHud"] is False
+    assert dev_a.post("/api/settings", json={"autoHideHud": True}).status_code == 200
+    assert dev_a.get("/api/settings").get_json()["autoHideHud"] is True
+    assert dev_b.get("/api/settings").get_json()["autoHideHud"] is False
+
+
+def test_photo_focus_returns_weighted_face_center(app):
+    client = app.app.test_client()
+    pid = photo_id_of("Trip/Day1/beach.avif")
+    with app.db.lock:
+        conn = app.db.borrow()
+        conn.execute("INSERT OR IGNORE INTO photo (rel) VALUES (?)", ("Trip/Day1/beach.avif",))
+        conn.execute(
+            "INSERT INTO face (rel, idx, box_x, box_y, box_w, box_h) VALUES (?, ?, ?, ?, ?, ?)",
+            ("Trip/Day1/beach.avif", 0, 0.2, 0.1, 0.2, 0.2),  # center (0.3, 0.2), area 0.04
+        )
+        conn.commit()
+    info = client.get(f"/api/photo/{pid}").get_json()
+    assert info["focus"] == {"x": 0.3, "y": 0.2}
+

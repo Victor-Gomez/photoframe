@@ -25,6 +25,9 @@ DEFAULTS = {
     "showRating": False,
     "showClock": True,
     "showPath": True,
+    "autoHideHud": False,
+    "kenBurns": True,
+    "debug": False,
     "ratingFilter": "unscored",
     "ratingThresholdEnabled": False,
     "ratingThreshold": 5,
@@ -67,6 +70,9 @@ class Settings:
         self.show_rating = self._bool("showRating", "SHOW_RATING")
         self.show_clock = self._bool("showClock", "SHOW_CLOCK")
         self.show_path = self._bool("showPath", "SHOW_PATH")
+        self.auto_hide_hud = self._bool("autoHideHud", "AUTO_HIDE_HUD")
+        self.ken_burns = self._bool("kenBurns", "KEN_BURNS")
+        self.debug = self._bool("debug", "DEBUG")
         self.rating_filter = self("ratingFilter", "RATING_FILTER").strip().lower()
         if self.rating_filter not in ("all", "above", "unscored"):
             self.rating_filter = "unscored"

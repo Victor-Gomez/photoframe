@@ -46,7 +46,8 @@ export function makeLibrary(count = 40) {
  */
 export async function boot({ photos = makeLibrary(), photoDelay = () => 5, slideSeconds = 60,
                              photoFails = () => false, quiet = null, language = 'es',
-                             deviceLanguage = '', imageFit = 'cover',
+                             deviceLanguage = '', imageFit = 'cover', autoHideHud = false,
+                             kenBurns = true, debug = false,
                              width = 1920, height = 1080, hardwareConcurrency = 4 } = {}) {
   const dom = new JSDOM(pageHtml(), {
     url: 'http://frame.test/',
@@ -133,7 +134,9 @@ export async function boot({ photos = makeLibrary(), photoDelay = () => 5, slide
     }
     if (path.startsWith('/api/photo/')) {
       const p = byId.get(path.split('/api/photo/')[1]) || {};
-      return json({ file: p.file, folder: p.folder, fullPath: `D:\\Fotos\\${p.folder}\\${p.file}` });
+      const body = { file: p.file, folder: p.folder, fullPath: `D:\\Fotos\\${p.folder}\\${p.file}` };
+      if (p.focus) body.focus = p.focus;
+      return json(body);
     }
     if (path.startsWith('/api/info/')) {
       const p = byId.get(path.split('/api/info/')[1]) || {};
@@ -147,7 +150,7 @@ export async function boot({ photos = makeLibrary(), photoDelay = () => 5, slide
     if (path.startsWith('/api/assets')) return json({ css: 1, js: 1, html: 1 });
     if (path.startsWith('/api/settings')) {
       return json({
-        slideSeconds, language, imageFit,
+        slideSeconds, language, imageFit, autoHideHud, kenBurns, debug,
         quietFrom: quiet ? quiet.from : '', quietTo: quiet ? quiet.to : '',
       });
     }

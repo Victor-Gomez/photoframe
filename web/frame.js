@@ -381,6 +381,9 @@
 
     const back = layers[1 - front];
     const photo = back.querySelector('img');
+    photo.style.transition = 'none';
+    photo.style.transform = '';
+    photo.style.objectPosition = '';
     photo.src = src(id);
     // Swallowed rather than thrown: a failure here may be the device choking on a
     // full-size file, which the retry below can fix.
@@ -702,6 +705,139 @@
   const toggleKeypadLabel = document.getElementById('toggle-keypad-label');
   let keypadVisible = false;
 
+  let kenBurnsEnabled = true;
+  let kbToggle = false;
+  let debugMode = false;
+  let debugRaf = null;
+  let kbState = null;
+  const debugOverlay = document.getElementById('debug-overlay');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  const fmtCoord = ({ x, y, z }) =>
+    `x=${x.toFixed(2).padStart(6)}%  y=${y.toFixed(2).padStart(6)}%  z=${z.toFixed(3)}`;
+
+  function readLiveTransform(img) {
+    if (!img) return { x: 0, y: 0, z: 1 };
+    const raw = getComputedStyle(img).transform;
+    if (!raw || raw === 'none') return { x: 0, y: 0, z: 1 };
+    const m = raw.match(/^matrix\(([^)]+)\)$/);
+    if (!m) return { x: 0, y: 0, z: 1 };
+    const parts = m[1].split(',').map(Number);
+    if (parts.length < 6 || parts.some(Number.isNaN)) return { x: 0, y: 0, z: 1 };
+    const z = Math.hypot(parts[0], parts[1]) || 1;
+    const w = img.clientWidth || innerWidth || 1;
+    const h = img.clientHeight || innerHeight || 1;
+    return { x: (parts[4] / w) * 100, y: (parts[5] / h) * 100, z };
+  }
+
+  function renderDebug() {
+    if (!debugOverlay) return;
+    if (!debugMode) {
+      debugOverlay.hidden = true;
+      debugRaf = null;
+      return;
+    }
+    debugOverlay.hidden = false;
+    const img = layers[front]?.querySelector('img');
+    const curr = readLiveTransform(img);
+    const st = kbState || { init: curr, final: curr, focus: null, duration: slide };
+    const fText = st.focus ? `${st.focus.x.toFixed(2)}, ${st.focus.y.toFixed(2)}` : 'none';
+    debugOverlay.textContent = [
+      `kb: ${kenBurnsEnabled && !reducedMotion.matches ? 'on' : 'off'} · fit: ${imageFit} · slide: ${Math.round(slide / 1000)}s · focus: ${fText}`,
+      `init : ${fmtCoord(st.init)}`,
+      `curr : ${fmtCoord(curr)}`,
+      `final: ${fmtCoord(st.final)}`,
+    ].join('\n');
+    debugRaf = requestAnimationFrame(renderDebug);
+  }
+
+  function syncDebugOverlay() {
+    if (!debugOverlay) return;
+    if (debugMode) {
+      if (!debugRaf) renderDebug();
+    } else {
+      if (debugRaf) { cancelAnimationFrame(debugRaf); debugRaf = null; }
+      debugOverlay.hidden = true;
+    }
+  }
+
+  function clearMotion(img) {
+    if (!img) return;
+    img._kbSeq = (img._kbSeq || 0) + 1;
+    img.style.transition = 'none';
+    img.style.transform = '';
+    kbState = null;
+  }
+
+  function applyFraming(img, focus) {
+    if (!img) return;
+    img.style.objectPosition = focus
+      ? `${(focus.x * 100).toFixed(1)}% ${(focus.y * 100).toFixed(1)}%`
+      : '';
+    if (!kenBurnsEnabled || reducedMotion.matches) {
+      clearMotion(img);
+      return;
+    }
+    kbToggle = !kbToggle;
+    const z = 1.24;
+    const maxShift = ((z - 1) / (2 * z)) * 100;
+    const rawX = focus ? (0.5 - focus.x) * 100 : (kbToggle ? 4.5 : -4.5);
+    const rawY = focus ? (0.5 - focus.y) * 100 : (kbToggle ? -2.8 : 2.8);
+    const tx = Math.max(-maxShift, Math.min(maxShift, rawX));
+    const ty = Math.max(-maxShift, Math.min(maxShift, rawY));
+    const wide = { x: 0, y: 0, z: 1 };
+    const tight = { x: tx, y: ty, z };
+    const init = kbToggle ? wide : tight;
+    const final = kbToggle ? tight : wide;
+    const toCss = c => `translate3d(${c.x.toFixed(2)}%, ${c.y.toFixed(2)}%, 0) scale(${c.z})`;
+    const duration = Math.max(3000, slide);
+    const seq = (img._kbSeq = (img._kbSeq || 0) + 1);
+    kbState = { init, final, focus, duration };
+    img.style.transition = 'none';
+    img.style.transform = toCss(init);
+    // Two animation frames ensure the browser commits `init` before transitioning to `final`.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (img._kbSeq !== seq) return;
+      img.style.transition = `transform ${duration}ms linear`;
+      img.style.transform = toCss(final);
+    }));
+  }
+
+  const HUD_IDLE_MS = 5000;
+  let autoHideHud = false;
+  let hudTimer = null;
+
+  function scheduleHudHide() {
+    clearTimeout(hudTimer);
+    if (!autoHideHud) return;
+    hudTimer = setTimeout(() => {
+      if (!autoHideHud) return;
+      if (menuOpen || galleryOpen || infoOpen || keypadVisible) {
+        scheduleHudHide();
+        return;
+      }
+      document.body.classList.add('hud-hidden');
+    }, HUD_IDLE_MS);
+  }
+
+  function showHud() {
+    document.body.classList.remove('hud-hidden');
+    scheduleHudHide();
+  }
+
+  function syncAutoHideHud(enabled) {
+    const next = Boolean(enabled);
+    if (next === autoHideHud) return;
+    autoHideHud = next;
+    if (!autoHideHud) {
+      clearTimeout(hudTimer);
+      hudTimer = null;
+      document.body.classList.remove('hud-hidden');
+    } else {
+      showHud();
+    }
+  }
+
   function syncKeypad() {
     document.body.classList.toggle('keypad-open', keypadVisible);
     if (ratingKeypad) {
@@ -747,6 +883,11 @@
       renderRatingBadge(cornerRating, showRating ? currentRating : null);
       clock.hidden = data.showClock === false;
       pathLabel.hidden = data.showPath === false;
+      syncAutoHideHud(data.autoHideHud);
+      kenBurnsEnabled = data.kenBurns !== false;
+      if (!kenBurnsEnabled) clearMotion(layers[front].querySelector('img'));
+      debugMode = Boolean(data.debug);
+      syncDebugOverlay();
       if (data.imageFit) {
         imageFit = data.imageFit === 'fit' ? 'fit' : 'cover';
         document.body.classList.toggle('fit', imageFit === 'fit');
@@ -906,6 +1047,7 @@
     document.body.classList.remove('menu-open');
     document.getElementById('more').setAttribute('aria-expanded', 'false');
     releaseHold();
+    if (autoHideHud) showHud();
   }
 
   async function blacklist(scope, folder, photoId) {
@@ -1021,10 +1163,12 @@
 
   document.getElementById('fullscreen').addEventListener('click', e => {
     e.stopPropagation();  // a tap on a control must not also advance the slide
+    if (autoHideHud) showHud();
     toggleFullscreen();
   });
   document.getElementById('more').addEventListener('click', e => {
     e.stopPropagation();
+    if (autoHideHud) showHud();
     menuOpen ? closeMenu() : openMenu();
   });
   menu.addEventListener('click', e => e.stopPropagation());
@@ -1109,9 +1253,11 @@
       pathLabel.replaceChildren(label);
       pathLabel.dataset.fullPath = info.fullPath || '';
       pathLabel.title = info.fullPath || '';
+      applyFraming(layers[front].querySelector('img'), info.focus || null);
     } catch {
       pathLabel.replaceChildren();  // leave it blank; the next slide asks again
       delete pathLabel.dataset.fullPath;
+      applyFraming(layers[front].querySelector('img'), null);
     }
   }
 
@@ -1142,6 +1288,7 @@
   // the photo layer that is a control.
   pathLabel.addEventListener('click', async event => {
     event.stopPropagation();
+    if (autoHideHud) showHud();
     const path = pathLabel.dataset.fullPath || pathLabel.textContent;
     if (!path) return;
     say(t(await copyText(path) ? 'pathCopied' : 'pathNotCopied'));
@@ -1194,6 +1341,7 @@
 
   heart.addEventListener('click', e => {
     e.stopPropagation();
+    if (autoHideHud) showHud();
     if (currentId) setFavorite(currentId, !isFavorite);
   });
   document.getElementById('menu-close').addEventListener('click', closeMenu);
@@ -1572,6 +1720,7 @@
     builtLo = builtHi = 0;
     galleryFocusIdx = -1;
     releaseHold();
+    if (autoHideHud) showHud();
   }
 
   /* ---- info: what the camera recorded -------------------------------------- */
@@ -1949,6 +2098,7 @@
     if (!galleryOpen) document.body.classList.remove('gallery-open');
     infoRows.replaceChildren();
     releaseHold();
+    if (autoHideHud) showHud();
   }
 
   document.getElementById('info-close').addEventListener('click', event => {
@@ -2222,6 +2372,13 @@
     if (button && typeof button.blur === 'function') button.blur();
   }, true);
 
+  function inBottomZone(x, y) {
+    const w = innerWidth || 1, h = innerHeight || 1;
+    const dx = (x - w / 2) / (w * 0.65);
+    const dy = (h - y) / (h * 0.22);
+    return dx * dx + dy * dy <= 1;
+  }
+
   // Tap to move — except while the menu is open, where a tap outside it just dismisses
   // it and leaves the photo alone.
   let swipedAt = 0;
@@ -2231,6 +2388,10 @@
     if (menuOpen) { closeMenu(); return; }
     // A swipe is followed by a synthetic click; without this the frame would step twice.
     if (Date.now() - swipedAt < 700) return;
+    if (inBottomZone(event.clientX, event.clientY)) {
+      if (autoHideHud) showHud();
+      return;
+    }
     step(event.clientX < innerWidth / 2 ? 'back' : 'forward');
   });
 

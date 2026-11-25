@@ -28,6 +28,40 @@ def natural_key(name: str):
             for part in re.split(r"(\d+)", name)]
 
 
+def _face_focus(db, rel: str) -> dict[str, float] | None:
+    """Area-weighted center of detected faces in normalized [0..1] coordinates."""
+    conn = db.borrow()
+    if conn is None:
+        return None
+    try:
+        with db.lock:
+            rows = conn.execute(
+                "SELECT box_x, box_y, box_w, box_h FROM face "
+                "WHERE rel = ? AND box_x IS NOT NULL AND box_y IS NOT NULL "
+                "AND box_w IS NOT NULL AND box_h IS NOT NULL",
+                (rel,),
+            ).fetchall()
+    except sqlite3.Error:
+        return None
+    if not rows:
+        return None
+    total_w = 0.0
+    sum_x = 0.0
+    sum_y = 0.0
+    for r in rows:
+        bw = max(float(r["box_w"]), 0.0)
+        bh = max(float(r["box_h"]), 0.0)
+        weight = max(bw * bh, 1e-4)
+        cx = float(r["box_x"]) + bw * 0.5
+        cy = float(r["box_y"]) + bh * 0.5
+        sum_x += cx * weight
+        sum_y += cy * weight
+        total_w += weight
+    fx = min(1.0, max(0.0, sum_x / total_w))
+    fy = min(1.0, max(0.0, sum_y / total_w))
+    return {"x": round(fx, 4), "y": round(fy, 4)}
+
+
 def blueprint(frame):
     bp = Blueprint("photos", __name__)
     library, rules, db = frame.library, frame.rules, frame.db
@@ -40,18 +74,23 @@ def blueprint(frame):
             abort(404)
         rel = PurePosixPath(src.relative_to(library.root).as_posix())
         parent = rel.parent.as_posix()
-        return jsonify(
-            file=rel.name,
-            folder="" if parent == "." else parent,
-            folders=ancestors(rel),
+        rel_str = rel.as_posix()
+        focus = _face_focus(db, rel_str)
+        payload = {
+            "file": rel.name,
+            "folder": "" if parent == "." else parent,
+            "folders": ancestors(rel),
             # The path as it exists on this machine, for copy-to-clipboard: the same
             # information the relative path carries, in a form a file manager accepts.
-            fullPath=str(src),
-            favorite=rules.favorite_check()(rel.as_posix().lower(), pid),
-            rating=library.rating_of(pid),
-            tags=sorted(library.tags_of(pid)),
-            ratio=library.ratio_of(pid),
-        )
+            "fullPath": str(src),
+            "favorite": rules.favorite_check()(rel_str.lower(), pid),
+            "rating": library.rating_of(pid),
+            "tags": sorted(library.tags_of(pid)),
+            "ratio": library.ratio_of(pid),
+        }
+        if focus is not None:
+            payload["focus"] = focus
+        return jsonify(**payload)
 
     @bp.get("/api/info/<pid>")
     def photo_details(pid: str):

@@ -248,3 +248,81 @@ test('imageFit applies the fit class and requests uncropped renders', async () =
       `expected a fit=contain image request, got ${frame.requested.join(', ')}`);
   } finally { frame.close(); }
 });
+
+test('bottom oval tap zone does not step the slideshow', async () => {
+  const frame = await boot({ width: 1000, height: 1000 });
+  try {
+    const first = frame.shown();
+    const clickAt = (x, y) => frame.window.document.body.dispatchEvent(
+      new frame.window.MouseEvent('click', { clientX: x, clientY: y, bubbles: true }),
+    );
+    clickAt(500, 800);   // bottom-center inside oval (y >= 780 at x = 500)
+    await frame.tick(SETTLE);
+    assert.equal(frame.shown(), first, 'bottom-center oval tap should not advance');
+
+    clickAt(920, 800);   // near right edge above the 14% corner height -> steps forward
+    const second = await frame.waitForChange(first);
+    assert.notEqual(second, first, 'right-side tap outside oval should advance');
+  } finally { frame.close(); }
+});
+
+test('autoHideHud hides controls after 5s idle and bottom tap shows them again', async () => {
+  const frame = await boot({ autoHideHud: true, width: 1000, height: 1000 });
+  try {
+    const { document } = frame.window;
+    await frame.tick(300);
+    assert.equal(document.body.classList.contains('hud-hidden'), false);
+
+    await frame.tick(5200);
+    assert.equal(document.body.classList.contains('hud-hidden'), true, 'HUD should hide after 5s idle');
+
+    const before = frame.shown();
+    document.body.dispatchEvent(
+      new frame.window.MouseEvent('click', { clientX: 500, clientY: 920, bubbles: true }),
+    );
+    assert.equal(document.body.classList.contains('hud-hidden'), false, 'bottom tap should reveal HUD');
+    await frame.tick(100);
+    assert.equal(frame.shown(), before, 'bottom tap should not step the photo');
+  } finally { frame.close(); }
+});
+
+test('face focus sets object-position and kenBurns alternates zoom-in and zoom-out', async () => {
+  const photos = makeLibrary(6).map((p, i) => ({
+    ...p,
+    focus: i % 2 === 0 ? { x: 0.25, y: 0.2 } : { x: 0.75, y: 0.3 },
+  }));
+  const frame = await boot({ photos, kenBurns: true });
+  try {
+    await frame.tick(200);
+    const activeImg = () => [...frame.window.document.querySelectorAll('.layer')]
+      .find(l => l.style.opacity === '1')
+      ?.querySelector('img');
+
+    const img1 = activeImg();
+    assert.equal(img1.style.objectPosition, '25.0% 20.0%');
+    const t1 = img1.style.transform;
+    assert.ok(t1.includes('scale('), `expected ken burns transform, got ${t1}`);
+
+    frame.key('ArrowRight');
+    await frame.waitForChange(frame.shown());
+    await frame.tick(200);
+    const img2 = activeImg();
+    assert.equal(img2.style.objectPosition, '75.0% 30.0%');
+    const t2 = img2.style.transform;
+    assert.notEqual(t2.includes('scale(1.24)'), t1.includes('scale(1.24)'),
+      'adjacent slides should alternate between zoom-in and zoom-out');
+  } finally { frame.close(); }
+});
+
+test('debug mode shows initial, current, and final trajectory coordinates', async () => {
+  const photos = makeLibrary(4).map(p => ({ ...p, focus: { x: 0.3, y: 0.25 } }));
+  const frame = await boot({ photos, kenBurns: true, debug: true });
+  try {
+    await frame.tick(250);
+    const overlay = frame.window.document.getElementById('debug-overlay');
+    assert.equal(overlay.hidden, false);
+    assert.match(overlay.textContent, /init\s*:/);
+    assert.match(overlay.textContent, /curr\s*:/);
+    assert.match(overlay.textContent, /final\s*:/);
+  } finally { frame.close(); }
+});

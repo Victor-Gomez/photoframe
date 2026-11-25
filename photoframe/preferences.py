@@ -39,6 +39,9 @@ DEVICE_KEYS = frozenset({
     "showRating",
     "showClock",
     "showPath",
+    "autoHideHud",
+    "kenBurns",
+    "debug",
     "ratingFilter",
     "ratingThresholdEnabled",
     "ratingThreshold",
@@ -145,7 +148,7 @@ def set_device_cookie(response, device_id: str) -> None:
     )
 
 QUIET = ("quietFrom", "quietTo")
-BOOLEANS = ("weightByRating", "showRating", "showClock", "showPath", "ratingThresholdEnabled")
+BOOLEANS = ("weightByRating", "showRating", "showClock", "showPath", "autoHideHud", "kenBurns", "debug", "ratingThresholdEnabled")
 LOG_LEVELS = ("off", "error", "info")
 RATING_FILTERS = ("all", "above", "unscored")
 IMAGE_FITS = ("cover", "fit")
@@ -232,6 +235,9 @@ class Preferences:
             "showRating": self.settings.show_rating,
             "showClock": self.settings.show_clock,
             "showPath": self.settings.show_path,
+            "autoHideHud": self.settings.auto_hide_hud,
+            "kenBurns": self.settings.ken_burns,
+            "debug": self.settings.debug,
             "ratingFilter": self.settings.rating_filter,
             "ratingThresholdEnabled": self.settings.rating_threshold_enabled,
             "ratingThreshold": self.settings.rating_threshold,
