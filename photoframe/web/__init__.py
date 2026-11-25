@@ -40,13 +40,17 @@ def create_app(frame: Frame) -> Flask:
         supplied = request.args.get("k") or request.cookies.get("frame_token") or ""
         if secrets.compare_digest(supplied, token):
             return None
+        if request.path.startswith("/api/"):
+            language = chosen(request.cookies.get(COOKIE), frame.prefs.language)
+            return jsonify(error=translator(language)("error.forbidden")), 403
         abort(403)
 
     @app.after_request
     def persist_token(response):
         if token and request.args.get("k"):
             response.set_cookie(
-                "frame_token", token, max_age=60 * 60 * 24 * 365, samesite="Lax")
+                "frame_token", token, max_age=60 * 60 * 24 * 365,
+                httponly=True, samesite="Lax")
         return response
 
     @app.errorhandler(DatabaseUnavailable)

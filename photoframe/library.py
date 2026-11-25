@@ -169,6 +169,68 @@ class Library:
             ratios = list(self._ratio.values())
         return {o: sum(1 for r in ratios if orientation_from(r) == o) for o in ORIENTATIONS}
 
+    def folders(self) -> list[str]:
+        """All folder paths in the library, including intermediate parents."""
+        with self._lock:
+            rels = list(self._rel_true.values())
+        seen: set[str] = set()
+        for rel in rels:
+            pos = rel.find("/")
+            while pos != -1:
+                seen.add(rel[:pos])
+                pos = rel.find("/", pos + 1)
+        return sorted(seen, key=str.casefold)
+
+    def filtered_ids(
+        self,
+        want: str | None,
+        squares: bool = True,
+        folder_filter: str = "",
+        rating_filter: str = "all",
+        threshold_enabled: bool = False,
+        threshold: int = 0,
+        fallback_all: bool = False,
+    ) -> tuple[list[str], dict[str, int | None], dict[str, str], bool]:
+        """Filter the live index in one pass without copying full-library maps."""
+        keep = fits if squares else (lambda ratio, w: orientation_from(ratio) == w)
+        folder_low = folder_filter.lower()
+        prefix = folder_low + "/" if folder_low else ""
+
+        with self._lock, self._shape_lock:
+            if want in ORIENTATIONS:
+                base_pids = [
+                    pid for pid in self._paths
+                    if pid in self._ratio and keep(self._ratio[pid], want)
+                ]
+                fell_back = False
+                if not base_pids and fallback_all and not self.probe_done.is_set():
+                    base_pids = list(self._paths)
+                    fell_back = True
+            else:
+                base_pids = list(self._paths)
+                fell_back = False
+
+            ids: list[str] = []
+            ratings: dict[str, int | None] = {}
+            relatives: dict[str, str] = {}
+            for pid in base_pids:
+                rel = self._rel_lower.get(pid, "")
+                if folder_low and rel != folder_low and not rel.startswith(prefix):
+                    continue
+                rating = self._ratings.get(pid)
+                if rating_filter == "unscored":
+                    if rating is not None:
+                        continue
+                else:
+                    if rating_filter == "above" and rating is None:
+                        continue
+                    if threshold_enabled and rating is not None and rating < threshold:
+                        continue
+                ids.append(pid)
+                ratings[pid] = rating
+                relatives[pid] = rel
+        return ids, ratings, relatives, fell_back
+
     # -- building ------------------------------------------------------------------
 
     def load(self) -> int:
@@ -209,11 +271,13 @@ class Library:
             if row["user_rating"] is not None:
                 ratings[pid] = int(row["user_rating"])
 
-        tags: dict[str, tuple[str, ...]] = {}
+        rel_to_pid = {rel: pid for pid, rel in true_paths.items()}
+        tag_lists: dict[str, list[str]] = {}
         for row in tag_rows:
-            pid = photo_id_of(row["rel"])
-            if pid in found and row["tag"]:
-                tags[pid] = tags.get(pid, ()) + (str(row["tag"]).lower(),)
+            pid = rel_to_pid.get(row["rel"])
+            if pid is not None and row["tag"]:
+                tag_lists.setdefault(pid, []).append(str(row["tag"]).lower())
+        tags = {pid: tuple(items) for pid, items in tag_lists.items()}
 
         self._replace(found, relatives, true_paths)
         with self._shape_lock:

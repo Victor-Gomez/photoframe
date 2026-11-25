@@ -184,8 +184,14 @@ def test_a_token_protected_frame_refuses_anonymous_requests(make_app):
     app = make_app({"frameToken": "sesame"})
     client = app.app.test_client()
 
-    assert client.get("/api/playlist").status_code == 403
-    assert client.get("/api/playlist?k=sesame").status_code == 200
+    anon = client.get("/api/playlist")
+    assert anon.status_code == 403
+    assert "error" in anon.get_json()
+
+    ok = client.get("/api/playlist?k=sesame")
+    assert ok.status_code == 200
+    set_cookie = ok.headers.get("Set-Cookie", "")
+    assert "HttpOnly" in set_cookie
 
 
 def test_hiding_invalidates_passes_a_client_is_still_paging_through(client, app):
@@ -205,8 +211,10 @@ def test_hiding_invalidates_passes_a_client_is_still_paging_through(client, app)
         .get_json()["removed"]
     )
 
-    rest = client.get(f"/api/playlist?token={token}&offset=0&limit={total}").get_json()
-    assert set(rest["ids"]).isdisjoint(hidden)
+    rest = client.get(f"/api/playlist?token={token}&offset=0&limit={total}")
+    assert rest.status_code == 404
+    fresh = client.get(f"/api/playlist?limit={total}").get_json()
+    assert set(fresh["ids"]).isdisjoint(hidden)
 
 
 def test_photo_info_carries_the_path_as_it_exists_on_this_machine(client, app):

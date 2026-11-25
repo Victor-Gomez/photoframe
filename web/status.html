@@ -21,6 +21,15 @@
       <div class="tile"><b>{{ traffic.originalShare }}</b><span>{{ t('tile.untouched') }}</span></div>
     </div>
 
+    <div class="status-actions">
+      <button type="button" id="btnRescan">{{ t('action.rescan') }}</button>
+      <button type="button" id="btnClearCache">{{ t('action.clearCache') }}</button>
+      <label class="switch">
+        <input type="checkbox" id="autoRefresh">
+        {{ t('action.autoRefresh') }}
+      </label>
+    </div>
+
     <h2>{{ t('h.library') }}</h2>
     <table>
       <tr><td>{{ t('row.folder') }}</td><td>{{ root }}</td></tr>
@@ -35,6 +44,8 @@
       <tr><td>{{ t('row.slideSeconds') }}</td><td>{{ prefs.slideSeconds }}</td></tr>
       <tr><td>{{ t('row.weightByRating') }}</td><td>{{ t('bool.on') if prefs.weightByRating else t('bool.off') }}</td></tr>
       <tr><td>{{ t('row.showRating') }}</td><td>{{ t('bool.on') if prefs.showRating else t('bool.off') }}</td></tr>
+      <tr><td>{{ t('row.showClock') }}</td><td>{{ t('bool.on') if prefs.showClock else t('bool.off') }}</td></tr>
+      <tr><td>{{ t('row.showPath') }}</td><td>{{ t('bool.on') if prefs.showPath else t('bool.off') }}</td></tr>
       <tr><td>{{ t('row.imageFit') }}</td><td>{{ t('imageFit.' + prefs.imageFit) }}</td></tr>
       <tr><td>{{ t('row.quiet') }}</td>
         <td>
@@ -111,6 +122,36 @@
     <p class="empty">{{ t('log.empty') }}</p>
     {% endif %}
   </main>
+
+  <script>
+    const AUTO_KEY = 'statusAutoRefresh';
+    const autoBox = document.getElementById('autoRefresh');
+    let refreshTimer = null;
+
+    function syncAutoRefresh() {
+      clearInterval(refreshTimer);
+      if (autoBox.checked) refreshTimer = setInterval(() => location.reload(), 10000);
+    }
+
+    try { autoBox.checked = localStorage.getItem(AUTO_KEY) === '1'; } catch {}
+    syncAutoRefresh();
+    autoBox.addEventListener('change', () => {
+      try { localStorage.setItem(AUTO_KEY, autoBox.checked ? '1' : '0'); } catch {}
+      syncAutoRefresh();
+    });
+
+    async function postAction(url, btn) {
+      btn.disabled = true;
+      try {
+        const res = await fetch(url, { method: 'POST' });
+        if (res.ok) location.reload();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    document.getElementById('btnRescan').addEventListener('click', e => postAction('/api/rescan', e.currentTarget));
+    document.getElementById('btnClearCache').addEventListener('click', e => postAction('/api/cache/clear', e.currentTarget));
+  </script>
 </body>
 
 </html>

@@ -14,7 +14,10 @@ from ..preferences import (
     LOG_LEVELS,
     ORIENTATION_FILTERS,
     RATING_FILTERS,
+    describe_device,
     device_id_from,
+    fingerprint_id,
+    mac_device_id,
     resolve_device,
     set_device_cookie,
 )
@@ -32,11 +35,9 @@ def blueprint(frame):
         dev_prefs = prefs.for_device(device_id)
         language = i18n.chosen(request.cookies.get(i18n.COOKIE), dev_prefs["language"])
         t = i18n.translator(language)
-        folders = sorted({
-            rel.partition("/")[0]
-            for rel in frame.library.rel_true_map().values()
-            if "/" in rel
-        }, key=str.casefold)
+        id_method, id_detail = describe_device(request, device_id, is_new)
+        device_info_text = t(f"device.id.{id_method}", detail=id_detail)
+        folders = frame.library.folders()
         response = make_response(render_template(
             "settings.html",
             tab="settings",
@@ -44,6 +45,7 @@ def blueprint(frame):
             ratingFilters=RATING_FILTERS, imageFits=IMAGE_FITS,
             orientationFilters=ORIENTATION_FILTERS, folders=folders,
             settings=dev_prefs, db=frame.db.state(),
+            deviceInfoText=device_info_text,
             # Empty means this device has not asked for one and follows the frame.
             deviceLanguage=request.cookies.get(i18n.COOKIE, ""),
             # The page's own script says a few things of its own, and cannot call t().
@@ -56,6 +58,7 @@ def blueprint(frame):
                 "reencoded": t("images.reencoded"),
                 "matchCount": t("settings.matchCount", count="{count}"),
                 "matchOne": t("settings.matchOne"),
+                "idFingerprint": t("device.id.fingerprint", detail="{id}"),
                 # Handed over with its placeholders intact, for the script to fill in.
                 "guess": t("device.guess", choice="{choice}", cores="{cores}", memory="{memory}"),
             },
@@ -86,6 +89,25 @@ def blueprint(frame):
         response = make_response(jsonify(**saved))
         if is_new:
             set_device_cookie(response, device_id)
+        return response
+
+    @bp.post("/api/device/identify")
+    def device_identify():
+        """Bind a session without saved overrides to its hardware/browser fingerprint."""
+        traits = request.get_json(silent=True)
+        if not isinstance(traits, dict) or not traits:
+            return jsonify(error="invalid traits"), 400
+        cur_id = device_id_from(request)
+        if cur_id and (prefs.has_device(cur_id) or cur_id == mac_device_id(request.remote_addr)):
+            return jsonify(deviceId=cur_id, switched=False, hasPrefs=prefs.has_device(cur_id))
+        fp_id = fingerprint_id(traits)
+        has_prefs = prefs.has_device(fp_id)
+        response = make_response(jsonify(
+            deviceId=fp_id,
+            switched=(fp_id != cur_id),
+            hasPrefs=has_prefs,
+        ))
+        set_device_cookie(response, fp_id)
         return response
 
     return bp

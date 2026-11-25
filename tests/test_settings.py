@@ -279,3 +279,65 @@ def test_fit_render_keeps_aspect_ratio_without_cropping(app, client):
         assert im.size == (200, 400)
     with Image.open(io.BytesIO(fit_resp.data)) as im:
         assert im.width == 200 and im.height < 400
+
+
+def test_show_clock_and_show_path_default_true_and_override_per_device(app):
+    dev_a = app.app.test_client()
+    dev_b = app.app.test_client()
+    assert dev_a.get("/").status_code == 200
+    assert dev_b.get("/").status_code == 200
+
+    init = dev_a.get("/api/settings").get_json()
+    assert init["showClock"] is True
+    assert init["showPath"] is True
+
+    dev_a.post("/api/settings", json={"showClock": False, "showPath": False})
+    a_prefs = dev_a.get("/api/settings").get_json()
+    b_prefs = dev_b.get("/api/settings").get_json()
+    assert a_prefs["showClock"] is False and a_prefs["showPath"] is False
+    assert b_prefs["showClock"] is True and b_prefs["showPath"] is True
+
+
+def test_fingerprint_identify_restores_settings_without_prior_cookies(app):
+    traits = {"platform": "Win32", "cores": 16, "memory": 8, "touch": 0, "tz": "Europe/Madrid", "gpu": "RTX"}
+    session1 = app.app.test_client()
+    assert session1.get("/").status_code == 200
+    r1 = session1.post("/api/device/identify", json=traits).get_json()
+    assert r1["switched"] is True
+    assert r1["hasPrefs"] is False
+    assert session1.post("/api/settings", json={"showClock": False, "ratingFilter": "all"}).status_code == 200
+
+    # Brand new cookie-less client (e.g. reopened Incognito window) with the same traits.
+    session2 = app.app.test_client()
+    assert session2.get("/").status_code == 200
+    r2 = session2.post("/api/device/identify", json=traits).get_json()
+    assert r2["deviceId"] == r1["deviceId"]
+    assert r2["switched"] is True
+    assert r2["hasPrefs"] is True
+    restored = session2.get("/api/settings").get_json()
+    assert restored["showClock"] is False
+    assert restored["ratingFilter"] == "all"
+
+
+def test_arp_mac_resolves_device_across_dhcp_ip_changes(app, monkeypatch):
+    from photoframe import preferences as prefs_mod
+
+    prefs_mod._ARP_CACHE.clear()
+    monkeypatch.setattr(
+        prefs_mod,
+        "_query_arp",
+        lambda ip: "2c:f0:5d:a2:68:bd" if ip in ("192.168.1.10", "192.168.1.99") else None,
+    )
+
+    c1 = app.app.test_client()
+    assert c1.get("/", environ_base={"REMOTE_ADDR": "192.168.1.10"}).status_code == 200
+    assert c1.post("/api/settings", json={"showPath": False}).status_code == 200
+    id_before = c1.get_cookie("frame_device").value
+
+    # New cookie-less Incognito session after DHCP gave the same PC a new IP.
+    c2 = app.app.test_client()
+    assert c2.get("/", environ_base={"REMOTE_ADDR": "192.168.1.99"}).status_code == 200
+    assert c2.get_cookie("frame_device").value == id_before
+    assert c2.get("/api/settings").get_json()["showPath"] is False
+    page = c2.get("/settings", environ_base={"REMOTE_ADDR": "192.168.1.99"}).get_data(as_text=True)
+    assert "Identificado por MAC (2c:f0:5d:a2:68:bd)" in page

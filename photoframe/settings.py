@@ -23,6 +23,8 @@ DEFAULTS = {
     "probeWorkers": 4,
     "weightByRating": False,
     "showRating": False,
+    "showClock": True,
+    "showPath": True,
     "ratingFilter": "unscored",
     "ratingThresholdEnabled": False,
     "ratingThreshold": 5,
@@ -63,6 +65,8 @@ class Settings:
         self.probe_workers = self("probeWorkers", "PROBE_WORKERS", int)
         self.weight_by_rating = self._bool("weightByRating", "WEIGHT_BY_RATING")
         self.show_rating = self._bool("showRating", "SHOW_RATING")
+        self.show_clock = self._bool("showClock", "SHOW_CLOCK")
+        self.show_path = self._bool("showPath", "SHOW_PATH")
         self.rating_filter = self("ratingFilter", "RATING_FILTER").strip().lower()
         if self.rating_filter not in ("all", "above", "unscored"):
             self.rating_filter = "unscored"

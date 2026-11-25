@@ -132,10 +132,10 @@ def test_the_pass_is_paged_and_a_token_keeps_its_order(client):
     assert again["ids"] == first["ids"]  # same pass, not a reshuffle
 
 
-def test_an_unknown_token_starts_a_fresh_pass_instead_of_failing(client):
-    body = client.get("/api/playlist?token=nonsense&ratio=1.7778&limit=2").get_json()
-    assert body["count"] == 2
-    assert body["token"] != "nonsense"
+def test_an_unknown_token_returns_404(client):
+    res = client.get("/api/playlist?token=nonsense&ratio=1.7778&limit=2")
+    assert res.status_code == 404
+    assert "error" in res.get_json()
 
 
 def test_a_library_still_being_indexed_serves_photos_rather_than_nothing(app):
@@ -247,3 +247,17 @@ def test_orientation_filter_controls_which_shapes_are_served(make_app):
     # /api/playlist/count matches the filtered playlist length without allocating a pass.
     cnt = client.get("/api/playlist/count?ratio=1.78").get_json()["count"]
     assert cnt == len(port_ids)
+
+
+def test_favorite_adds_one_ticket_when_weighted(make_app):
+    app = make_app({"weightByRating": True, "ratingFilter": "all"})
+    wide = photo_id_of("wide.avif")
+    beach = photo_id_of("Trip/Day1/beach.avif")
+    app.library.set_rating(wide, 10)
+    app.library.set_rating(beach, 0)
+    app.rules.add("favorites", "wide.avif")
+    app.rules.add("favorites", "Trip/Day1/beach.avif")
+
+    body = app.app.test_client().get("/api/playlist?ratio=1.7778&limit=0").get_json()
+    assert body["ids"].count(wide) == 11
+    assert body["ids"].count(beach) == 1

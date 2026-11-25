@@ -154,7 +154,7 @@
   <div id="night" aria-hidden="true"></div>
   <div id="hud"><span id="path"></span><span id="clock"></span></div>
   <div id="corner-rating" hidden aria-hidden="true"></div>
-  <div id="rating-keypad" hidden role="group" aria-label="Teclado de valoración">
+  <div id="rating-keypad" hidden role="group" aria-label="Teclado de valoración" data-t-aria="ui.ratingKeypad">
     <button type="button" data-rating="7">7</button>
     <button type="button" data-rating="8">8</button>
     <button type="button" data-rating="9">9</button>
@@ -164,6 +164,7 @@
     <button type="button" data-rating="1">1</button>
     <button type="button" data-rating="2">2</button>
     <button type="button" data-rating="3">3</button>
+    <button type="button" data-rating="0" class="zero">0</button>
   </div>
   <div id="status">
     <div class="loader">
@@ -172,6 +173,10 @@
       <div class="box3"></div>
     </div>
     <span id="status-text"></span>
+    <div id="status-actions" hidden>
+      <button type="button" id="status-settings" data-t="menu.settings">Ajustes</button>
+      <button type="button" id="status-clear-filters" data-t="ui.clearFilters">Quitar filtros</button>
+    </div>
   </div>
 
   <div id="controls">

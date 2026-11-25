@@ -69,29 +69,46 @@ class RenderCache:
     """Rendered JPEGs, most recently used last. Memory only — never written to disk.
 
     For re-viewing: stepping back and forward, or scrolling the gallery over one burst. A
-    photo seen for the first time still pays the full decode.
+    photo seen for the first time still pays the full decode. Gallery thumbnails live in
+    their own smaller pool so scrolling a shoot never evicts full-screen renders.
     """
+
+    THUMB_EDGE = 512
+    THUMB_SHARE = 0.25
 
     def __init__(self, budget_bytes: int, hits: int = 0, misses: int = 0):
         self.budget = budget_bytes
-        self._entries: "OrderedDict[tuple, bytes]" = OrderedDict()
+        self._thumb_budget = int(budget_bytes * self.THUMB_SHARE) if budget_bytes else 0
+        self._full_budget = budget_bytes - self._thumb_budget
+        self._full: "OrderedDict[tuple, bytes]" = OrderedDict()
+        self._thumbs: "OrderedDict[tuple, bytes]" = OrderedDict()
         self._lock = threading.Lock()
-        self._bytes = 0
+        self._full_bytes = 0
+        self._thumb_bytes = 0
         self.hits = max(0, int(hits))
         self.misses = max(0, int(misses))
 
+    def _is_thumb(self, key) -> bool:
+        return (
+            isinstance(key, tuple)
+            and len(key) >= 3
+            and isinstance(key[1], int)
+            and isinstance(key[2], int)
+            and 64 <= max(key[1], key[2]) <= self.THUMB_EDGE
+        )
+
     def __len__(self) -> int:
         with self._lock:
-            return len(self._entries)
+            return len(self._full) + len(self._thumbs)
 
     def __contains__(self, key) -> bool:
         with self._lock:
-            return key in self._entries
+            return key in self._full or key in self._thumbs
 
     @property
     def nbytes(self) -> int:
         with self._lock:
-            return self._bytes
+            return self._full_bytes + self._thumb_bytes
 
     @staticmethod
     def key(source: Path, width: int, height: int, fit: bool = False):
@@ -105,25 +122,44 @@ class RenderCache:
     def get(self, key) -> bytes | None:
         if key is None or not self.budget:
             return None
+        is_thumb = self._is_thumb(key)
         with self._lock:
-            data = self._entries.get(key)
+            pool = self._thumbs if is_thumb else self._full
+            data = pool.get(key)
             if data is None:
                 self.misses += 1
                 return None
-            self._entries.move_to_end(key)  # freshly used, so last to be evicted
+            pool.move_to_end(key)  # freshly used, so last to be evicted
             self.hits += 1
             return data
 
     def put(self, key, data: bytes) -> None:
-        if key is None or not self.budget or len(data) > self.budget:
+        if key is None or not self.budget:
+            return
+        is_thumb = self._is_thumb(key)
+        pool_budget = self._thumb_budget if is_thumb else self._full_budget
+        if len(data) > pool_budget:
             return
         with self._lock:
-            if key in self._entries:
-                self._bytes -= len(self._entries.pop(key))
-            self._entries[key] = data
-            self._bytes += len(data)
-            while self._bytes > self.budget and self._entries:
-                self._bytes -= len(self._entries.popitem(last=False)[1])
+            pool = self._thumbs if is_thumb else self._full
+            used = self._thumb_bytes if is_thumb else self._full_bytes
+            if key in pool:
+                used -= len(pool.pop(key))
+            pool[key] = data
+            used += len(data)
+            while used > pool_budget and pool:
+                used -= len(pool.popitem(last=False)[1])
+            if is_thumb:
+                self._thumb_bytes = used
+            else:
+                self._full_bytes = used
+
+    def clear(self) -> None:
+        with self._lock:
+            self._full.clear()
+            self._thumbs.clear()
+            self._full_bytes = 0
+            self._thumb_bytes = 0
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -132,9 +168,10 @@ class RenderCache:
     def stats(self) -> dict:
         with self._lock:
             looked_up = self.hits + self.misses
+            nbytes = self._full_bytes + self._thumb_bytes
             return {
-                "entries": len(self._entries),
-                "mb": round(self._bytes / 1048576, 1),
+                "entries": len(self._full) + len(self._thumbs),
+                "mb": round(nbytes / 1048576, 1),
                 "budgetMB": self.budget // 1048576,
                 "hits": self.hits,
                 "misses": self.misses,
@@ -236,7 +273,7 @@ class Renderer:
             fitted = ImageOps.fit(im, (width, height), method=Image.LANCZOS, centering=(0.5, 0.5))
         buffer = io.BytesIO()
         fitted.convert("RGB").save(
-            buffer, "JPEG", quality=self.quality, optimize=True, progressive=True)
+            buffer, "JPEG", quality=self.quality, progressive=True)
         buffer.seek(0)
         return buffer
 

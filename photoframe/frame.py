@@ -28,7 +28,7 @@ from .settings import Settings
 
 log = logging.getLogger(__name__)
 STATS_META_KEY = "frame.stats"
-STATS_FLUSH_SECONDS = 30
+STATS_FLUSH_SECONDS = 300
 
 
 def _load_stats(db: Database) -> dict:
@@ -73,12 +73,12 @@ class Frame:
         self.db.on_reopen(self.rules.reload)
         self.db.on_reopen(self.prefs.reload)
         self.db.on_reopen(self.apply_prefs)
+        self.db.on_reopen(self._reload_index)
         self.apply_prefs()
 
     def apply_prefs(self) -> None:
         """The settings that are not simply read where they are used."""
         logs.set_level(self.prefs["logLevel"])
-        self.db.on_reopen(self._reload_index)
 
     def _reload_index(self) -> None:
         count = self.library.load()   # new photos, renames and removals, without a restart

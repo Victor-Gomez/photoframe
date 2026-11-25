@@ -12,27 +12,35 @@ from ..preferences import device_id_from
 PAGE_DEFAULT = 300
 DEFAULT_RATING_WEIGHT = 5
 MAX_RATING_WEIGHT = 10
+MAX_SEGMENTS = MAX_RATING_WEIGHT + 1
 
 
-def weighted_shuffle(ids: list[str], ratings: dict[str, int | None], enabled: bool) -> list[str]:
-    """Shuffle a pass where each rating point gives an image one raffle ticket.
+def weighted_shuffle(
+    ids: list[str],
+    ratings: dict[str, int | None],
+    enabled: bool,
+    favorites: set[str] | None = None,
+) -> list[str]:
+    """Shuffle a pass where each rating point gives an image one raffle ticket (+1 if favourite).
 
-    Unrated images default to 5 tickets; 0-rated images get 0 tickets.
-    Spreading a photo's tickets across 10 segments avoids adjacent duplicates.
+    Unrated images default to 5 tickets; 0-rated non-favourite images get 0 tickets.
+    Spreading a photo's tickets across 11 segments avoids adjacent duplicates.
     """
     if not enabled:
         random.shuffle(ids)
         return ids
 
-    segments: list[list[str]] = [[] for _ in range(MAX_RATING_WEIGHT)]
+    n_segments = MAX_SEGMENTS if favorites else MAX_RATING_WEIGHT
+    segments: list[list[str]] = [[] for _ in range(n_segments)]
     for pid in ids:
         raw = ratings.get(pid)
-        weight = DEFAULT_RATING_WEIGHT if raw is None else max(0, min(MAX_RATING_WEIGHT, int(raw)))
+        base = DEFAULT_RATING_WEIGHT if raw is None else max(0, min(MAX_RATING_WEIGHT, int(raw)))
+        weight = base + (1 if favorites and pid in favorites else 0)
         if weight == 0:
             continue
-        start = random.randrange(MAX_RATING_WEIGHT)
+        start = random.randrange(n_segments)
         for k in range(weight):
-            segments[(start + (k * MAX_RATING_WEIGHT) // weight) % MAX_RATING_WEIGHT].append(pid)
+            segments[(start + (k * n_segments) // weight) % n_segments].append(pid)
 
     for segment in segments:
         random.shuffle(segment)
@@ -57,55 +65,42 @@ def blueprint(frame):
             **extra,
         )
 
-    def filtered_ids(dev_prefs: dict, screen: float, want: str = "") -> tuple[list[str], str, str]:
+    def filtered_ids(
+        dev_prefs: dict, screen: float, want: str = "",
+    ) -> tuple[list[str], dict[str, int | None], dict[str, str], str, str]:
         ofilter = dev_prefs["orientationFilter"]
         matched_on = "none"
+        target: str | None = None
+        squares = True
         if want in ORIENTATIONS:
             # Asked for by name, so taken literally: no near-square photos folded in.
-            items = library.matching(want, squares=False)
+            target = want
+            squares = False
             matched_on = "orientation"
         elif ofilter == "any":
-            items = library.items()
             want = "any"
         elif ofilter in ORIENTATIONS:
-            items = library.matching(ofilter, squares=False)
-            want = ofilter
+            target = want = ofilter
+            squares = False
             matched_on = "orientation"
         elif screen > 0:
             # Orientation, not a band around the exact ratio: matching more finely just
             # sorts the library by the shape of the camera that took each photo.
-            want = orientation_from(screen)
-            items = library.matching(want)
+            target = want = orientation_from(screen)
             matched_on = "orientation"
-        else:
-            items = library.items()
 
-        # While the aspect index is still building every filter matches nothing.
-        # Unfiltered photos until it catches up beat "the library is empty".
-        if not items and not library.probe_done.is_set():
-            items = library.items()
+        ids, ratings, relatives, fell_back = library.filtered_ids(
+            target,
+            squares=squares,
+            folder_filter=dev_prefs["folderFilter"],
+            rating_filter=dev_prefs["ratingFilter"],
+            threshold_enabled=dev_prefs["ratingThresholdEnabled"],
+            threshold=dev_prefs["ratingThreshold"],
+            fallback_all=True,
+        )
+        if fell_back:
             matched_on = "nothing yet (still indexing)"
-
-        ids = [pid for pid, _ in items]
-        relatives = library.rel_lower_map()
-        folder_filter = dev_prefs["folderFilter"].lower()
-        if folder_filter:
-            prefix = folder_filter + "/"
-            ids = [
-                pid for pid in ids
-                if (rel := relatives.get(pid, "")) == folder_filter or rel.startswith(prefix)
-            ]
-        rfilter = dev_prefs["ratingFilter"]
-        if rfilter == "unscored":
-            ids = [pid for pid in ids if library.rating_of(pid) is None]
-        else:
-            if rfilter == "above":
-                ids = [pid for pid in ids if library.rating_of(pid) is not None]
-            if dev_prefs["ratingThresholdEnabled"]:
-                thresh = dev_prefs["ratingThreshold"]
-                ids = [pid for pid in ids
-                       if (r := library.rating_of(pid)) is None or r >= thresh]
-        return ids, want, matched_on
+        return ids, ratings, relatives, want, matched_on
 
     def parse_screen() -> float:
         try:
@@ -119,7 +114,7 @@ def blueprint(frame):
     @bp.get("/api/playlist/count")
     def playlist_count():
         dev_prefs = prefs.for_device(device_id_from(request))
-        ids, _, _ = filtered_ids(dev_prefs, parse_screen())
+        ids, _, _, _, _ = filtered_ids(dev_prefs, parse_screen())
         return jsonify(count=len(ids))
 
     @bp.get("/api/playlist")
@@ -128,7 +123,7 @@ def blueprint(frame):
 
         `?ratio=1.78` — the client's own width/height — is read only for its orientation.
         `?orientation=landscape|portrait` says the same directly. Neither means the whole
-        library. Favourites are not a separate mode: they appear `favoriteWeight` times.
+        library.
         """
         dev_prefs = prefs.for_device(device_id_from(request))
         limit = request.args.get("limit", type=int)
@@ -138,21 +133,20 @@ def blueprint(frame):
         token = request.args.get("token", "")
         if token:
             existing = library.passes.get(token)
-            if existing is not None:
-                offset = max(0, request.args.get("offset", type=int) or 0)
-                return page_of(token, existing, offset, limit, dev_prefs, photos=len(existing))
+            if existing is None:
+                return jsonify(error="playlist expired"), 404
+            offset = max(0, request.args.get("offset", type=int) or 0)
+            return page_of(token, existing, offset, limit, dev_prefs, photos=len(existing))
 
         want = request.args.get("orientation", "").lower()
         screen = parse_screen()
-        ids, want, matched_on = filtered_ids(dev_prefs, screen, want)
+        ids, ratings, relatives, want, matched_on = filtered_ids(dev_prefs, screen, want)
         ofilter = dev_prefs["orientationFilter"]
         rfilter = dev_prefs["ratingFilter"]
-        relatives = library.rel_lower_map()
 
         favorite = rules.favorite_check()   # one snapshot for the whole pass
         favorites = {pid for pid in ids if favorite(relatives.get(pid, ""), pid)}
-        ratings = {pid: library.rating_of(pid) for pid in ids}
-        ids = weighted_shuffle(ids, ratings, dev_prefs["weightByRating"])
+        ids = weighted_shuffle(ids, ratings, dev_prefs["weightByRating"], favorites)
 
         token = secrets.token_urlsafe(9)
         library.passes.add(token, ids)

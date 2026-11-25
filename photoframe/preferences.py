@@ -6,9 +6,14 @@ half: the few settings someone sets from a page. They belong to the library rath
 the box serving it, so they live in the database and follow it between machines.
 """
 
+import hashlib
+import ipaddress
+import json
 import logging
 import re
+import subprocess
 import threading
+import time
 import uuid
 
 import store
@@ -23,11 +28,17 @@ PREFIX = "frame."
 DEVICE_PREFIX = PREFIX + "device."
 DEVICE_COOKIE = "frame_device"
 DEVICE_ID_RE = re.compile(r"^[a-f0-9]{16,64}$")
+MAC_RE = re.compile(r"\b([0-9a-f]{2}(?:[:-][0-9a-f]{2}){5})\b", re.I)
 HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+_ARP_CACHE: dict[str, tuple[str | None, float]] = {}
+_ARP_LOCK = threading.Lock()
+_ARP_TTL = 60.0
 
 DEVICE_KEYS = frozenset({
     "weightByRating",
     "showRating",
+    "showClock",
+    "showPath",
     "ratingFilter",
     "ratingThresholdEnabled",
     "ratingThreshold",
@@ -43,12 +54,85 @@ def device_id_from(request) -> str | None:
     return raw if DEVICE_ID_RE.fullmatch(raw) else None
 
 
+def _arp_mac(ip: str) -> str | None:
+    """Look up a LAN client's MAC address in the OS ARP table, cached briefly."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if addr.is_loopback or addr.version != 4:
+        return None
+    now = time.monotonic()
+    with _ARP_LOCK:
+        cached = _ARP_CACHE.get(ip)
+        if cached and cached[1] > now:
+            return cached[0]
+    mac = _query_arp(ip)
+    with _ARP_LOCK:
+        _ARP_CACHE[ip] = (mac, now + _ARP_TTL)
+    return mac
+
+
+def _query_arp(ip: str) -> str | None:
+    try:
+        out = subprocess.check_output(
+            ["arp", "-a", ip],
+            text=True,
+            timeout=1,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        if ip not in line:
+            continue
+        m = MAC_RE.search(line)
+        if not m:
+            continue
+        norm = m.group(1).lower().replace("-", ":")
+        if norm == "ff:ff:ff:ff:ff:ff" or norm.startswith("01:00:5e:"):
+            continue
+        return norm
+    return None
+
+
+def mac_of(ip: str | None) -> str | None:
+    if not ip:
+        return None
+    return _arp_mac(ip)
+
+
+def mac_device_id(ip: str | None) -> str | None:
+    mac = mac_of(ip)
+    if not mac:
+        return None
+    return hashlib.sha256(f"mac:{mac}".encode("ascii")).hexdigest()[:32]
+
+
+def describe_device(request, device_id: str, is_new: bool) -> tuple[str, str]:
+    """Return (method, detail) explaining how `device_id` was resolved."""
+    mac = mac_of(getattr(request, "remote_addr", None))
+    if mac and device_id == hashlib.sha256(f"mac:{mac}".encode("ascii")).hexdigest()[:32]:
+        return "mac", mac
+    return ("new" if is_new else "cookie"), device_id[:8]
+
+
 def resolve_device(request) -> tuple[str, bool]:
-    """Return (device_id, is_new), minting a fresh hex UUID when absent or invalid."""
+    """Return (device_id, is_new): cookie first, then LAN ARP MAC, then fresh UUID."""
     existing = device_id_from(request)
     if existing:
         return existing, False
+    mac_id = mac_device_id(getattr(request, "remote_addr", None))
+    if mac_id:
+        return mac_id, True
     return uuid.uuid4().hex, True
+
+
+def fingerprint_id(traits: dict) -> str:
+    """Deterministic 32-char hex device ID from stable browser/hardware traits."""
+    payload = json.dumps(traits, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
 def set_device_cookie(response, device_id: str) -> None:
@@ -61,7 +145,7 @@ def set_device_cookie(response, device_id: str) -> None:
     )
 
 QUIET = ("quietFrom", "quietTo")
-BOOLEANS = ("weightByRating", "showRating", "ratingThresholdEnabled")
+BOOLEANS = ("weightByRating", "showRating", "showClock", "showPath", "ratingThresholdEnabled")
 LOG_LEVELS = ("off", "error", "info")
 RATING_FILTERS = ("all", "above", "unscored")
 IMAGE_FITS = ("cover", "fit")
@@ -146,6 +230,8 @@ class Preferences:
             "slideSeconds": self.settings.slide_seconds,
             "weightByRating": self.settings.weight_by_rating,
             "showRating": self.settings.show_rating,
+            "showClock": self.settings.show_clock,
+            "showPath": self.settings.show_path,
             "ratingFilter": self.settings.rating_filter,
             "ratingThresholdEnabled": self.settings.rating_threshold_enabled,
             "ratingThreshold": self.settings.rating_threshold,
@@ -204,6 +290,10 @@ class Preferences:
         with self._lock:
             return dict(self._values)
 
+    def has_device(self, device_id: str) -> bool:
+        with self._lock:
+            return device_id in self._devices
+
     def for_device(self, device_id: str | None) -> dict:
         with self._lock:
             if not device_id or device_id not in self._devices:
@@ -225,6 +315,14 @@ class Preferences:
     @property
     def show_rating(self) -> bool:
         return self["showRating"]
+
+    @property
+    def show_clock(self) -> bool:
+        return self["showClock"]
+
+    @property
+    def show_path(self) -> bool:
+        return self["showPath"]
 
     @property
     def rating_filter(self) -> str:

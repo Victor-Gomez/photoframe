@@ -36,6 +36,13 @@ def blueprint(frame):
         """Pick up whatever scan.py has recorded since: a reload, not a walk."""
         return jsonify(count=library.refresh())
 
+    @bp.post("/api/cache/clear")
+    def cache_clear():
+        """Drop all cached renders from memory."""
+        frame.cache.clear()
+        log.info("render cache cleared by %s", request.remote_addr)
+        return jsonify(**frame.cache.stats())
+
     def report() -> dict:
         settings.reload()
         shown = dict(settings.values)

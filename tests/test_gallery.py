@@ -146,6 +146,20 @@ def test_undo_puts_the_photo_back_among_its_neighbours(app, client):
     assert victim in ids_of(client.get(f"/api/neighbors/{pid}").get_json())
 
 
+def test_thumbnail_cache_does_not_evict_fullscreen_renders():
+    cache = RenderCache(1000)  # 750 full, 250 thumbs
+    full_key = ("full.avif", 1920, 1080, False, 0, 0)
+    cache.put(full_key, b"f" * 500)
+    for i in range(10):
+        cache.put((f"thumb{i}.avif", 320, 213, False, 0, 0), b"t" * 100)
+
+    assert full_key in cache
+    assert cache.nbytes <= 1000
+    cache.clear()
+    assert len(cache) == 0
+    assert cache.nbytes == 0
+
+
 def test_no_span_returns_the_whole_folder(app, client):
     pid = photo_id_of("Trip/Day1/beach.avif")
     payload = client.get(f"/api/neighbors/{pid}").get_json()

@@ -76,7 +76,7 @@
       </div>
     </fieldset>
 
-    <h2>{{ t('h.device') }} <span id="matchCount" class="match-count" hidden></span></h2>
+    <h2>{{ t('h.device') }}<span id="deviceInfoBadge" class="device-info-badge" tabindex="0" title="{{ deviceInfoText }}" aria-label="{{ deviceInfoText }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span class="device-info-tip" role="tooltip">{{ deviceInfoText }}</span></span><span id="matchCount" class="match-count" hidden></span></h2>
     <p class="note">{{ t('device.note') }}</p>
     <fieldset>
       <div class="field">
@@ -95,6 +95,26 @@
         <div class="controls">
           <label class="switch">
             <input type="checkbox" id="showRating" {{ "checked" if settings.showRating }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="showClock">{{ t('row.showClock') }}
+          <small>{{ t('hint.showClock') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="showClock" {{ "checked" if settings.showClock }}>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="showPath">{{ t('row.showPath') }}
+          <small>{{ t('hint.showPath') }}</small></label>
+        <div class="controls">
+          <label class="switch">
+            <input type="checkbox" id="showPath" {{ "checked" if settings.showPath }}>
           </label>
         </div>
       </div>
@@ -135,18 +155,19 @@
       </div>
 
       <div class="field">
-        <label for="folderFilter">{{ t('row.folderFilter') }}
+        <label for="folderPickerBtn">{{ t('row.folderFilter') }}
           <small>{{ t('hint.folderFilter') }}</small></label>
         <div class="controls">
-          <select id="folderFilter">
-            <option value="" {{ "selected" if not settings.folderFilter }}>{{ t('folderFilter.all') }}</option>
-            {% if settings.folderFilter and settings.folderFilter not in folders %}
-            <option value="{{ settings.folderFilter }}" selected>{{ settings.folderFilter }}</option>
-            {% endif %}
-            {% for folder in folders %}
-            <option value="{{ folder }}" {{ "selected" if settings.folderFilter == folder }}>{{ folder }}</option>
-            {% endfor %}
-          </select>
+          <div class="folder-picker" id="folderPicker">
+            <input type="hidden" id="folderFilter" value="{{ settings.folderFilter }}">
+            <div class="folder-picker-bar">
+              <button type="button" class="folder-picker-btn" id="folderPickerBtn" aria-expanded="false">
+                <span id="folderPickerLabel">{{ settings.folderFilter or t('folderFilter.all') }}</span>
+              </button>
+              <button type="button" class="folder-picker-clear" id="folderPickerClear" aria-label="×" {{ 'hidden' if not settings.folderFilter }}>×</button>
+            </div>
+            <div class="folder-tree" id="folderTree" hidden></div>
+          </div>
         </div>
       </div>
 
@@ -235,6 +256,50 @@
   <script>
     const TEXT = {{ js_text | tojson }};
     const $ = id => document.getElementById(id);
+
+    (async () => {
+      try {
+        if (sessionStorage.getItem('fp_bound')) return;
+        let gpu = '';
+        try {
+          const c = document.createElement('canvas');
+          const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+          const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+          if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+        } catch {}
+        let tz = '';
+        try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch {}
+        const traits = {
+          platform: navigator.platform || '',
+          cores: navigator.hardwareConcurrency || 0,
+          memory: navigator.deviceMemory || 0,
+          touch: navigator.maxTouchPoints || 0,
+          tz,
+          gpu,
+        };
+        const res = await fetch('/api/device/identify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(traits),
+        });
+        if (res.ok) {
+          sessionStorage.setItem('fp_bound', '1');
+          const info = await res.json();
+          if (info.switched && info.hasPrefs) {
+            location.reload();
+          } else if (info.switched) {
+            const badge = $('deviceInfoBadge');
+            const label = TEXT.idFingerprint.replace('{id}', info.deviceId.slice(0, 8));
+            if (badge) {
+              badge.title = label;
+              badge.setAttribute('aria-label', label);
+              const tip = badge.querySelector('.device-info-tip');
+              if (tip) tip.textContent = label;
+            }
+          }
+        }
+      } catch {}
+    })();
 
     // Every control saves itself the moment it changes, so there is nothing to forget to
     // press. The toast is the only acknowledgement, which is why a failure keeps it up
@@ -341,11 +406,13 @@
         paintSlide();
         $('weightByRating').checked = !!body.weightByRating;
         $('showRating').checked = !!body.showRating;
+        $('showClock').checked = !!body.showClock;
+        $('showPath').checked = !!body.showPath;
         paintSegmented('ratingFilter', body.ratingFilter);
         $('ratingThresholdEnabled').checked = !!body.ratingThresholdEnabled;
         $('ratingThreshold').textContent = body.ratingThreshold;
         paintThreshold();
-        $('folderFilter').value = body.folderFilter;
+        setFolderValue(body.folderFilter);
         paintSegmented('imageFit', body.imageFit);
         paintSegmented('orientationFilter', body.orientationFilter);
         paintSegmented('language', body.language);
@@ -390,6 +457,8 @@
     });
     $('weightByRating').addEventListener('change', () => save({ weightByRating: $('weightByRating').checked }));
     $('showRating').addEventListener('change', () => save({ showRating: $('showRating').checked }));
+    $('showClock').addEventListener('change', () => save({ showClock: $('showClock').checked }));
+    $('showPath').addEventListener('change', () => save({ showPath: $('showPath').checked }));
     bindSegmented('ratingFilter', val => { paintThreshold(); save({ ratingFilter: val }); });
     $('ratingThresholdEnabled').addEventListener('change', () => { paintThreshold(); save({ ratingThresholdEnabled: $('ratingThresholdEnabled').checked }); });
     for (const [id, delta] of [['threshMinus', -1], ['threshPlus', 1]]) {
@@ -400,7 +469,145 @@
         save({ ratingThreshold: next });
       });
     }
-    $('folderFilter').addEventListener('change', () => save({ folderFilter: $('folderFilter').value }));
+    const FOLDERS = {{ folders | tojson }};
+    const ALL_FOLDERS_LABEL = {{ t('folderFilter.all') | tojson }};
+    const FOLDER_SEARCH_PLACEHOLDER = {{ t('folderFilter.search') | tojson }};
+
+    function setFolderValue(val) {
+      $('folderFilter').value = val || '';
+      $('folderPickerLabel').textContent = val || ALL_FOLDERS_LABEL;
+      $('folderPickerClear').hidden = !val;
+      for (const row of $('folderTree').querySelectorAll('.ft-row')) {
+        row.classList.toggle('selected', row.dataset.path === (val || ''));
+      }
+    }
+
+    function buildFolderTree() {
+      const root = { children: new Map() };
+      for (const full of FOLDERS) {
+        let node = root;
+        let acc = '';
+        for (const part of full.split('/')) {
+          acc = acc ? `${acc}/${part}` : part;
+          if (!node.children.has(part)) node.children.set(part, { name: part, path: acc, children: new Map() });
+          node = node.children.get(part);
+        }
+      }
+      const tree = $('folderTree');
+      const current = $('folderFilter').value;
+
+      const searchInput = document.createElement('input');
+      searchInput.type = 'search';
+      searchInput.className = 'folder-search';
+      searchInput.placeholder = FOLDER_SEARCH_PLACEHOLDER;
+      searchInput.addEventListener('click', e => e.stopPropagation());
+      tree.append(searchInput);
+
+      function makeRow(label, path, depth, hasKids, onToggle) {
+        const row = document.createElement('div');
+        row.className = 'ft-row' + (path === current ? ' selected' : '');
+        row.dataset.path = path;
+        row.style.paddingLeft = `${depth * 1.05}rem`;
+
+        const tog = document.createElement('button');
+        tog.type = 'button';
+        tog.className = 'ft-toggle' + (hasKids ? '' : ' leaf');
+        tog.textContent = '▸';
+        if (hasKids) tog.addEventListener('click', e => { e.stopPropagation(); onToggle(tog); });
+
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'ft-pick';
+        pick.textContent = label;
+        pick.addEventListener('click', () => {
+          setFolderValue(path);
+          closeFolderTree();
+          save({ folderFilter: path });
+        });
+        row.append(tog, pick);
+        return row;
+      }
+
+      tree.append(makeRow(ALL_FOLDERS_LABEL, '', 0, false));
+      const nodes = [];
+      function renderNodes(map, container, depth) {
+        for (const node of map.values()) {
+          const hasKids = node.children.size > 0;
+          let kidsBox = null;
+          const expanded = hasKids && current && (current === node.path || current.startsWith(node.path + '/'));
+          const row = makeRow(node.name, node.path, depth, hasKids, tog => {
+            if (!kidsBox) return;
+            const open = kidsBox.hidden;
+            kidsBox.hidden = !open;
+            tog.textContent = open ? '▾' : '▸';
+          });
+          if (expanded) row.querySelector('.ft-toggle').textContent = '▾';
+          container.append(row);
+          const item = { path: node.path.toLowerCase(), row, kidsBox: null, tog: row.querySelector('.ft-toggle') };
+          nodes.push(item);
+          if (hasKids) {
+            kidsBox = document.createElement('div');
+            kidsBox.className = 'ft-children';
+            kidsBox.hidden = !expanded;
+            item.kidsBox = kidsBox;
+            renderNodes(node.children, kidsBox, depth + 1);
+            container.append(kidsBox);
+          }
+        }
+      }
+      renderNodes(root.children, tree, 0);
+
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+          for (const item of nodes) {
+            item.row.hidden = false;
+            if (item.kidsBox) {
+              const exp = current && (current === item.row.dataset.path || current.startsWith(item.row.dataset.path + '/'));
+              item.kidsBox.hidden = !exp;
+              item.tog.textContent = exp ? '▾' : '▸';
+            }
+          }
+          return;
+        }
+        const matched = new Set(nodes.filter(n => n.path.includes(q)).map(n => n.path));
+        for (const item of nodes) {
+          const isMatch = matched.has(item.path);
+          const hasMatchingChild = [...matched].some(p => p.startsWith(item.path + '/'));
+          item.row.hidden = !isMatch && !hasMatchingChild;
+          if (item.kidsBox) {
+            item.kidsBox.hidden = !hasMatchingChild;
+            item.tog.textContent = hasMatchingChild ? '▾' : '▸';
+          }
+        }
+      });
+    }
+
+    function closeFolderTree() {
+      $('folderTree').hidden = true;
+      $('folderPickerBtn').setAttribute('aria-expanded', 'false');
+    }
+
+    buildFolderTree();
+    $('folderPickerBtn').addEventListener('click', e => {
+      e.stopPropagation();
+      const open = $('folderTree').hidden;
+      $('folderTree').hidden = !open;
+      $('folderPickerBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        const inp = $('folderTree').querySelector('.folder-search');
+        if (inp) inp.focus();
+      }
+    });
+    $('folderPickerClear').addEventListener('click', e => {
+      e.stopPropagation();
+      setFolderValue('');
+      closeFolderTree();
+      save({ folderFilter: '' });
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#folderPicker')) closeFolderTree();
+    });
     bindSegmented('imageFit', val => save({ imageFit: val }));
     bindSegmented('orientationFilter', val => save({ orientationFilter: val }));
     bindSegmented('language', val => save({ language: val }));

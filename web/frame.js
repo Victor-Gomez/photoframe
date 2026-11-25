@@ -13,6 +13,7 @@
   const layers = [...document.querySelectorAll('.layer')];
   const status = document.getElementById('status');
   const statusText = document.getElementById('status-text');
+  const statusActions = document.getElementById('status-actions');
   const clock = document.getElementById('clock');
   const pathLabel = document.getElementById('path');
 
@@ -31,6 +32,7 @@
       reconnecting: 'reconectando…',
       preparing: 'preparando la biblioteca…',
       noPhotos: 'no hay fotos',
+      noMatch: 'ninguna foto coincide con los filtros activos',
       nothingToShow: 'no hay fotos que mostrar',
       undo: 'Deshacer',
       unreadable: 'no se ha podido leer esta foto',
@@ -80,6 +82,9 @@
       'ui.rowUp': 'Fila anterior',
       'ui.rowDown': 'Fila siguiente',
       'ui.hide': 'Ocultar',
+      'ui.show': 'Mostrar',
+      'ui.clearFilters': 'Quitar filtros',
+      'ui.ratingKeypad': 'Teclado de valoración',
       'menu.hidePhoto': 'Ocultar esta foto',
       'menu.gallery': 'Fotos cercanas',
       'menu.info': 'Información',
@@ -102,6 +107,7 @@
       reconnecting: 'reconnecting…',
       preparing: 'preparing the library…',
       noPhotos: 'no photos',
+      noMatch: 'no photos match the active filters',
       nothingToShow: 'nothing to show',
       undo: 'Undo',
       unreadable: 'could not read this photo',
@@ -151,6 +157,9 @@
       'ui.rowUp': 'Previous row',
       'ui.rowDown': 'Next row',
       'ui.hide': 'Hide',
+      'ui.show': 'Show',
+      'ui.clearFilters': 'Clear filters',
+      'ui.ratingKeypad': 'Rating keypad',
       'menu.hidePhoto': 'Hide this photo',
       'menu.gallery': 'Nearby photos',
       'menu.info': 'Information',
@@ -512,10 +521,23 @@
     front = 1 - front;
     fadeEndsAt = performance.now() + (fast ? QUICK_FADE : FADE);
     status.hidden = true;
+    status.classList.remove('no-loader');
+    if (statusActions) statusActions.hidden = true;
   }
 
-  function stall(message, ms) {
+  function hasActiveFilter() {
+    return Boolean(
+      activeFolderFilter ||
+      (activeRatingFilter && activeRatingFilter !== 'all') ||
+      activeRatingThresholdEnabled ||
+      (activeOrientationFilter && activeOrientationFilter !== 'device' && activeOrientationFilter !== 'any')
+    );
+  }
+
+  function stall(message, ms, showFilterActions = false) {
     status.hidden = false;
+    status.classList.toggle('no-loader', showFilterActions);
+    if (statusActions) statusActions.hidden = !showFilterActions;
     statusText.textContent = message;
     return wait(ms);
   }
@@ -536,6 +558,7 @@
         // not the same as a library with no photos in it — and it is worth asking again
         // in seconds rather than half a minute.
         if (indexing) await stall(t('preparing'), 3000);
+        else if (hasActiveFilter()) await stall(t('noMatch'), 30000, true);
         else await stall(t('noPhotos'), 30000);
         continue;
       }
@@ -722,6 +745,8 @@
       activeWeightByRating = Boolean(data.weightByRating);
       showRating = Boolean(data.showRating);
       renderRatingBadge(cornerRating, showRating ? currentRating : null);
+      clock.hidden = data.showClock === false;
+      pathLabel.hidden = data.showPath === false;
       if (data.imageFit) {
         imageFit = data.imageFit === 'fit' ? 'fit' : 'cover';
         document.body.classList.toggle('fit', imageFit === 'fit');
@@ -735,6 +760,7 @@
   }
 
   let waiters = [];
+  let reloadPending = false;
 
   function waitWhile(predicate) {
     return predicate()
@@ -744,6 +770,7 @@
 
   function releaseHold() {
     waiters = waiters.filter(({ predicate, resolve }) => predicate() || (resolve(), false));
+    if (reloadPending && !interacting()) location.reload();
   }
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -919,7 +946,7 @@
         if (cutShort) cutShort();
       }
     } catch {
-      say('no se ha podido contactar con el servidor');
+      say(t('offline'));
     }
   }
 
@@ -946,7 +973,7 @@
       }
       say(t('restored', entry));
     } catch {
-      say('no se ha podido contactar con el servidor');
+      say(t('offline'));
     }
   }
 
@@ -1140,7 +1167,7 @@
       say(t(wanted ? 'favorited' : 'unfavorited'), null, heartIcon(wanted));
       if (advance) step('forward');
     } catch {
-      say('no se ha podido contactar con el servidor');
+      say(t('offline'));
       if (id === currentId) showHeart(!wanted);
     }
   }
@@ -1181,7 +1208,7 @@
   let galleryOpen = false;
   let galleryWatcher = null;
   // The whole folder's metadata, and the slice of it that currently exists as tiles.
-  let galleryPhotos = [], galleryDir = '', builtLo = 0, builtHi = 0;
+  let galleryPhotos = [], galleryDir = '', builtLo = 0, builtHi = 0, galleryFocusIdx = -1;
   let tileW = 320, tileH = 213;
   // The folder outside the built window, as two blocks of empty rows -- see paintSpacers.
   const leadSpacer = spacerElement(), tailSpacer = spacerElement();
@@ -1365,6 +1392,7 @@
     galleryPhotos = data.photos;
     galleryDir = data.folder;
     const here = Math.max(0, data.photos.findIndex(photo => photo.current));
+    galleryFocusIdx = here;
 
     // Tiles exist only around the photo you were on; the rest of the folder is the two
     // spacers, and the window follows the scroll from there.
@@ -1410,6 +1438,7 @@
     const tile = tileTemplate.content.firstElementChild.cloneNode(true);
     tile.dataset.id = photo.id;
     tile.classList.toggle('current', !!photo.current);
+    tile.classList.toggle('kbd-focus', galleryFocusIdx >= 0 && galleryPhotos[galleryFocusIdx]?.id === photo.id);
     tile.querySelector('figcaption').textContent = photo.file;
 
     const img = tile.querySelector('img');
@@ -1498,7 +1527,7 @@
     const button = tile.querySelector('.tile-hide');
     tile.classList.toggle('hidden-photo', on);
     button.setAttribute('aria-pressed', on ? 'true' : 'false');
-    button.setAttribute('aria-label', on ? 'Mostrar' : 'Ocultar');
+    button.setAttribute('aria-label', t(on ? 'ui.show' : 'ui.hide'));
     button.querySelector('.hide-on').toggleAttribute('hidden', !on);
     button.querySelector('.hide-off').toggleAttribute('hidden', !!on);
   }
@@ -1541,6 +1570,7 @@
     galleryPhotos = [];
     galleryDir = '';
     builtLo = builtHi = 0;
+    galleryFocusIdx = -1;
     releaseHold();
   }
 
@@ -1952,6 +1982,38 @@
     event.stopPropagation();
     location.href = '/settings';
   });
+  const statusSettingsBtn = document.getElementById('status-settings');
+  if (statusSettingsBtn) {
+    statusSettingsBtn.addEventListener('click', event => {
+      event.stopPropagation();
+      location.href = '/settings';
+    });
+  }
+  const statusClearBtn = document.getElementById('status-clear-filters');
+  if (statusClearBtn) {
+    statusClearBtn.addEventListener('click', async event => {
+      event.stopPropagation();
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folderFilter: '',
+            ratingFilter: 'all',
+            ratingThresholdEnabled: false,
+            orientationFilter: 'device',
+          }),
+        });
+        if (res.ok) {
+          await readSettings();
+          cursor = ids.length;
+          if (cutShort) cutShort();
+        }
+      } catch {
+        say(t('offline'));
+      }
+    });
+  }
   // Tapping the dimmed area around the card closes it.
   //
   // stopPropagation matters as much as the close: without it the click carries on to the
@@ -2054,11 +2116,53 @@
     openGallery(menuId);
   });
 
+  function focusGalleryTile(idx) {
+    if (!galleryOpen || !galleryPhotos.length) return;
+    galleryFocusIdx = Math.max(0, Math.min(galleryPhotos.length - 1, idx));
+    const cols = columnCount() || 1;
+    const pitch = rowPitch();
+    if (pitch) {
+      const targetRow = Math.floor(galleryFocusIdx / cols);
+      const top = targetRow * pitch;
+      const viewTop = galleryGrid.scrollTop;
+      const viewBot = viewTop + galleryGrid.clientHeight;
+      if (top < viewTop) galleryGrid.scrollTop = alignRow(top);
+      else if (top + pitch > viewBot) galleryGrid.scrollTop = alignRow(top + pitch - galleryGrid.clientHeight);
+      extendGallery();
+    }
+    for (const el of galleryGrid.querySelectorAll('.tile.kbd-focus')) el.classList.remove('kbd-focus');
+    const photo = galleryPhotos[galleryFocusIdx];
+    const tile = photo && galleryGrid.querySelector(`.tile[data-id="${photo.id}"]`);
+    if (tile) tile.classList.add('kbd-focus');
+  }
+
   addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (infoOpen) closeInfo();
-    else if (galleryOpen) closeGallery();
-    else if (menuOpen) closeMenu();
+    if (e.key === 'Escape') {
+      if (infoOpen) closeInfo();
+      else if (galleryOpen) closeGallery();
+      else if (menuOpen) closeMenu();
+      return;
+    }
+    if (!galleryOpen || !galleryPhotos.length || e.ctrlKey || e.metaKey || e.altKey) return;
+    const cols = columnCount() || 1;
+    const idx = galleryFocusIdx >= 0 ? galleryFocusIdx : 0;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); focusGalleryTile(idx - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); focusGalleryTile(idx + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusGalleryTile(idx - cols); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); focusGalleryTile(idx + cols); }
+    else if (e.key === 'Enter') {
+      const photo = galleryPhotos[idx];
+      const tile = photo && galleryGrid.querySelector(`.tile[data-id="${photo.id}"]`);
+      if (photo && (!tile || !tile.classList.contains('hidden-photo'))) showFromGallery(photo.id);
+    } else if (e.key === 'f' || e.key === 'F') {
+      const photo = galleryPhotos[idx];
+      const tile = photo && galleryGrid.querySelector(`.tile[data-id="${photo.id}"]`);
+      if (photo && tile) tile.querySelector('.tile-fav').click();
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      const photo = galleryPhotos[idx];
+      const tile = photo && galleryGrid.querySelector(`.tile[data-id="${photo.id}"]`);
+      if (photo && tile) toggleTileHidden(tile, photo);
+    }
   });
 
   function drawClock() {
@@ -2082,6 +2186,8 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     keepAwake();
+    checkAssets();
+    readSettings();
     releaseHold();  // back on screen: carry on where the slideshow left off
   });
   const jumpMark = document.getElementById('jump');
@@ -2370,25 +2476,67 @@
   // frame does not mean walking over to the device. The response is a few bytes and
   // only ever differs while someone is actually editing.
   let assetStamp = null;
-  setInterval(async () => {
+  async function checkAssets() {
     try {
       const now = await (await fetch('/api/assets', { cache: 'no-store' })).json();
       const stamp = `${now.html}/${now.css}/${now.js}`;
       if (assetStamp === null) assetStamp = stamp;
       else if (assetStamp !== stamp) location.reload();
     } catch { /* server restarting, most likely; try again next tick */ }
-  }, 5000);
+  }
+  setInterval(() => { if (!document.hidden) checkAssets(); }, 5000);
 
   // The quiet hours themselves change rarely; whether they are in force changes every
   // day, so the clock is checked far more often than the setting is re-read.
+  function deviceTraits() {
+    let gpu = '';
+    try {
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+    } catch { /* no WebGL */ }
+    let tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* ignore */ }
+    return {
+      platform: navigator.platform || '',
+      cores: navigator.hardwareConcurrency || 0,
+      memory: navigator.deviceMemory || 0,
+      touch: navigator.maxTouchPoints || 0,
+      tz,
+      gpu,
+    };
+  }
+
+  async function identifyDevice() {
+    try {
+      if (sessionStorage.getItem('fp_bound')) return;
+      const res = await fetch('/api/device/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deviceTraits()),
+      });
+      if (!res.ok) return;
+      sessionStorage.setItem('fp_bound', '1');
+      const info = await res.json();
+      if (info.switched) {
+        await readSettings();
+        if (info.hasPrefs) cursor = ids.length;
+      }
+    } catch { /* ignore */ }
+  }
+
   applyLanguage();
-  readSettings();
-  setInterval(readSettings, 60000);
+  identifyDevice().then(readSettings);
+  setInterval(() => { if (!document.hidden) readSettings(); }, 60000);
   setInterval(paintNight, 20000);
 
-  // A long-lived tab still accumulates; six hours is a cheap reset. It was two while
-  // the frame held full-resolution bitmaps, which is no longer the case.
-  setTimeout(() => location.reload(), 6 * 3600 * 1000);
+  // A long-lived tab still accumulates; six hours is a cheap reset, deferred until idle
+  // so it never interrupts an open menu, gallery or info panel.
+  setTimeout(() => {
+    if (!interacting()) location.reload();
+    else reloadPending = true;
+  }, 6 * 3600 * 1000);
 
   run();
 })();

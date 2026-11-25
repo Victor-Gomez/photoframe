@@ -193,6 +193,31 @@ body.fit.keypad-open .layer img {
   display: none;
 }
 
+#status.no-loader .loader {
+  display: none;
+}
+
+#status-actions {
+  display: flex;
+  gap: 1.8vmin;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#status-actions[hidden] {
+  display: none;
+}
+
+#status-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1.2vmin 2.8vmin;
+  font: 500 2.2vmin system-ui, sans-serif;
+  cursor: pointer;
+}
+
 /* No text on a normal load — the loader says it. The span still carries the
    occasional message like "reconnecting…", and takes no room when empty. */
 #status-text:empty {
@@ -794,6 +819,11 @@ body.gallery-open {
   outline-offset: -0.4vmin;
 }
 
+.tile.kbd-focus {
+  outline: 0.35vmin solid #fff;
+  outline-offset: -0.35vmin;
+}
+
 /* Hidden until the tile's render has actually been requested, and gone the moment the
    photo arrives. Sixty built tiles animating three boxes each — most of them scrolled well
    out of sight — is real work on a low-powered machine, so only the tiles genuinely
@@ -1095,6 +1125,12 @@ body.asleep #night { opacity: 1; }
   border-color: var(--btn-color, #84cc16);
   box-shadow: 0 0 0 1px var(--btn-color, #84cc16);
   background: rgba(255, 255, 255, 0.16);
+}
+
+#rating-keypad button.zero {
+  grid-column: 1 / -1;
+  width: auto;
+  height: clamp(46px, calc(var(--stable-vmin) * 0.11), 58px);
 }
 
 #info-favorite {

@@ -346,6 +346,54 @@ button:disabled { opacity: .5; cursor: default; }
   border-color: rgba(248, 113, 113, .4);
 }
 
+.device-info-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: .45rem;
+  border-radius: 999px;
+  background: #17171a;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  vertical-align: middle;
+  cursor: help;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.device-info-badge svg {
+  width: .92rem;
+  height: .92rem;
+}
+
+.device-info-tip {
+  position: absolute;
+  bottom: calc(100% + .45rem);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: #1c1c22;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  padding: .35rem .6rem;
+  font-size: .78rem;
+  box-shadow: 0 .4rem 1.2rem rgba(0, 0, 0, .6);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s;
+  z-index: 30;
+}
+
+.device-info-badge:hover .device-info-tip,
+.device-info-badge:focus-visible .device-info-tip {
+  opacity: 1;
+}
+
 .actions {
   display: flex;
   align-items: center;
@@ -881,4 +929,113 @@ label.switch input[type="checkbox"]:checked::before {
   75% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
   87.5% { width: 48px; height: 48px; margin-top: 64px; margin-left: 64px; }
   100% { width: 112px; height: 48px; margin-top: 64px; margin-left: 0px; }
+}
+
+/* -- status actions ------------------------------------------------------- */
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+  margin-top: 1rem;
+}
+
+.status-actions .switch {
+  margin-left: auto;
+  font-size: .88rem;
+  color: var(--dim);
+}
+
+/* -- hierarchical folder picker ------------------------------------------- */
+
+.folder-picker { position: relative; min-width: 14rem; max-width: 24rem; }
+
+.folder-picker-bar { display: flex; align-items: stretch; gap: .35rem; }
+
+.folder-picker-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  background: #0d0d0f;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: .4rem;
+  padding: .45rem .65rem;
+  text-align: left;
+  min-width: 0;
+}
+
+.folder-picker-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.folder-picker-clear { padding: .35rem .65rem; line-height: 1; }
+
+.folder-tree {
+  position: absolute;
+  right: 0;
+  top: calc(100% + .35rem);
+  z-index: 20;
+  width: max(100%, 19rem);
+  max-height: 20rem;
+  overflow: auto;
+  background: #141418;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  padding: .35rem;
+  box-shadow: 0 .6rem 1.8rem rgba(0, 0, 0, .65);
+}
+
+.ft-row {
+  display: flex;
+  align-items: center;
+  gap: .2rem;
+  border-radius: .35rem;
+}
+
+.ft-row:hover { background: rgba(255, 255, 255, .06); }
+
+.ft-row.selected { background: rgba(47, 79, 143, .38); }
+
+.ft-toggle {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-size: .78rem;
+  display: grid;
+  place-items: center;
+}
+
+.ft-toggle.leaf { visibility: hidden; }
+
+.ft-pick {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: .3rem .45rem;
+  font-size: .88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ft-children[hidden] { display: none; }
+
+.folder-search {
+  width: 100%;
+  background: #0d0d0f;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  padding: .35rem .5rem;
+  margin-bottom: .35rem;
+  font: inherit;
+  font-size: .85rem;
 }
