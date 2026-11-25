@@ -30,6 +30,7 @@
       </label>
     </div>
 
+    <section>
     <h2>{{ t('h.library') }}</h2>
     <table>
       <tr><td>{{ t('row.folder') }}</td><td>{{ root }}</td></tr>
@@ -38,7 +39,9 @@
       <tr><td>{{ t('row.shapes') }}</td>
         <td>{{ t('shapes.building') if indexing else t('shapes.ready') }}</td></tr>
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.preferences') }}</h2>
     <table>
       <tr><td>{{ t('row.slideSeconds') }}</td><td>{{ prefs.slideSeconds }}</td></tr>
@@ -59,7 +62,9 @@
       <tr><td>{{ t('row.language') }}</td><td>{{ languages[prefs.language] }}</td></tr>
       <tr><td>{{ t('row.logLevel') }}</td><td>{{ t('log.' + prefs.logLevel) }}</td></tr>
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.database') }}</h2>
     <table>
       <tr><td>{{ t('row.file') }}</td><td>{{ db.file }}</td></tr>
@@ -68,7 +73,9 @@
           {{- t('db.open') if db.open
               else t('db.releasedFor', seconds=db.releasedFor, timeout=db.timeout) }}</td></tr>
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.served') }}</h2>
     <table>
       <tr><td>{{ t('row.untouched') }}</td>
@@ -80,7 +87,9 @@
                  budget=renders.cache.budgetMB, hits=renders.cache.hits,
                  misses=renders.cache.misses) }}</td></tr>
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.decoders') }}</h2>
     <p class="note">{{ t('decoders.note') }}</p>
     <table>
@@ -91,7 +100,9 @@
                 fastest=method.fastestMs, slowest=method.slowestMs)
               if method.renders else t('decoder.none') }}</td></tr>
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.rules') }}</h2>
     <table>
       {% for label, entries in (('rules.folders', rules.blacklist.folders),
@@ -106,7 +117,9 @@
         </td></tr>
       {% endfor %}
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.config') }}</h2>
     <p class="note">{{ t('config.note') }}</p>
     <table>
@@ -114,13 +127,16 @@
       <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
       {% endfor %}
     </table>
+    </section>
 
+    <section>
     <h2>{{ t('h.log', lines=log|length) }}</h2>
     {% if log %}
     <pre>{{ log|join("\n") }}</pre>
     {% else %}
     <p class="empty">{{ t('log.empty') }}</p>
     {% endif %}
+    </section>
   </main>
 
   <script>

@@ -10,6 +10,7 @@
   --good: #7bd88f;
   --warn: #e8c46a;
   --bad: #e88b8b;
+  --sticky-top: 4.2rem;
 }
 
 * { box-sizing: border-box; }
@@ -19,19 +20,25 @@
 html {
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  overflow-anchor: none;
 }
 
 body {
   margin: 0;
-  padding: 1.4rem 1.1rem 4rem;
+  padding: var(--sticky-top) 1.1rem 4rem;
   background: #0d0d0f;
   color: var(--ink);
   font: 15px/1.5 system-ui, sans-serif;
 }
 
+body.stats-page {
+  padding-top: calc(var(--sticky-top) + 4.5rem);
+}
+
 main { max-width: 56rem; margin: 0 auto; }
 
-body.stats-page main { max-width: 90rem; }
+body.stats-page main,
+body.stats-page .header-inner { max-width: 90rem; }
 
 h2 {
   font-size: .82rem;
@@ -42,11 +49,59 @@ h2 {
   font-weight: 600;
 }
 
+.sticky-section {
+  position: fixed;
+  top: var(--sticky-top);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  padding: .45rem 1.1rem .5rem;
+  background: #0d0d0f;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sticky-section[hidden] { display: none; }
+
+.sticky-section::after,
+.stats-filter-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 1.5rem;
+  background: linear-gradient(to bottom, rgba(13, 13, 15, 0.95), rgba(13, 13, 15, 0));
+  pointer-events: none;
+}
+
+.sticky-section-inner {
+  max-width: 56rem;
+  margin: 0 auto;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--dim);
+  font-weight: 600;
+}
+
 header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: var(--sticky-top);
+  padding: 0 1.1rem;
+  background: #0d0d0f;
+}
+
+.header-inner {
+  max-width: 56rem;
+  height: 100%;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: .6rem;
-  margin-bottom: 1.6rem;
 }
 
 .tabs { display: flex; gap: .6rem; }
@@ -57,10 +112,8 @@ header {
 .back,
 .tabs a {
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(20, 20, 24, 0.92);
   color: rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   box-shadow: 0 .2rem 1rem rgba(0, 0, 0, 0.45);
   text-decoration: none;
   transition: background-color .25s, border-color .25s, color .25s;
@@ -389,6 +442,11 @@ button:disabled { opacity: .5; cursor: default; }
   z-index: 30;
 }
 
+.sticky-section .device-info-tip {
+  bottom: auto;
+  top: calc(100% + .45rem);
+}
+
 .device-info-badge:hover .device-info-tip,
 .device-info-badge:focus-visible .device-info-tip {
   opacity: 1;
@@ -509,7 +567,19 @@ label.switch input[type="checkbox"]:checked::before {
   white-space: nowrap !important;
 }
 
+.stats-filter-wrap {
+  position: fixed;
+  top: var(--sticky-top);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  padding: 0 1.1rem .6rem;
+  background: #0d0d0f;
+}
+
 .stats-filter {
+  max-width: 90rem;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: .75rem;
@@ -518,6 +588,7 @@ label.switch input[type="checkbox"]:checked::before {
   border: 1px solid var(--line);
   border-radius: .6rem;
   padding: .7rem .95rem;
+  box-shadow: 0 .35rem 1rem rgba(0, 0, 0, 0.45);
 }
 
 .stats-loader {

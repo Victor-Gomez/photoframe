@@ -10,6 +10,7 @@
     {% include "admin-header.html" %}
     <h1 class="visually-hidden">{{ t('statistics.title') }}</h1>
 
+    <div class="stats-filter-wrap">
     <div class="stats-filter">
       <label for="catalogFilter">{{ t('stats.catalogLabel') }}</label>
       <select id="catalogFilter">
@@ -29,6 +30,7 @@
           <path d="M8 16H3v5" />
         </svg>
       </button>
+    </div>
     </div>
 
     <p id="dbBusyNote" class="note bad" {{ "" if not stats.databaseOpen else "hidden" }}>{{ t('db.busy') }}</p>

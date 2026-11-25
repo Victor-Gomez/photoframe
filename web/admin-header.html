@@ -1,15 +1,54 @@
 {# The two admin pages are one page with two tabs: same header, same bar, different panel.
    Kept as one file so they cannot drift apart. `tab` says which one is showing. #}
 <header>
-  <a class="back" href="/" aria-label="{{ t('nav.frame') }}" title="{{ t('nav.frame') }}">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-      stroke-linejoin="round" aria-hidden="true">
-      <path d="m15 18-6-6 6-6" />
-    </svg>
-  </a>
-  <nav class="tabs">
-    <a href="/settings" class="{{ 'here' if tab == 'settings' }}">{{ t('nav.settings') }}</a>
-    <a href="/status" class="{{ 'here' if tab == 'status' }}">{{ t('nav.status') }}</a>
-    <a href="/statistics" class="{{ 'here' if tab == 'statistics' }}">{{ t('nav.statistics') }}</a>
-  </nav>
+  <div class="header-inner">
+    <a class="back" href="/" aria-label="{{ t('nav.frame') }}" title="{{ t('nav.frame') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="m15 18-6-6 6-6" />
+      </svg>
+    </a>
+    <nav class="tabs">
+      <a href="/settings" class="{{ 'here' if tab == 'settings' }}">{{ t('nav.settings') }}</a>
+      <a href="/status" class="{{ 'here' if tab == 'status' }}">{{ t('nav.status') }}</a>
+      <a href="/statistics" class="{{ 'here' if tab == 'statistics' }}">{{ t('nav.statistics') }}</a>
+    </nav>
+  </div>
 </header>
+{% if tab in ('settings', 'status') %}
+<div id="stickySection" class="sticky-section" hidden>
+  <div id="stickySectionText" class="sticky-section-inner"></div>
+</div>
+<script>
+  (() => {
+    const bar = document.getElementById('stickySection');
+    const text = document.getElementById('stickySectionText');
+    const header = document.querySelector('header');
+    let ticking = false;
+    function update() {
+      ticking = false;
+      const top = header ? header.getBoundingClientRect().bottom : 0;
+      const headings = document.querySelectorAll('main h2');
+      let current = null;
+      for (const h of headings) {
+        if (h.getBoundingClientRect().top <= top + 4) current = h;
+      }
+      if (current) {
+        const clone = current.cloneNode(true);
+        for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id');
+        text.replaceChildren(...clone.childNodes);
+        bar.hidden = false;
+      } else {
+        bar.hidden = true;
+      }
+    }
+    addEventListener('scroll', () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    }, { passive: true });
+    update();
+  })();
+</script>
+{% endif %}
